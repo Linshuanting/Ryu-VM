@@ -1,0 +1,13 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Debug with ryu-manager",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/home/user/.pyenv/versions/3.9.13/bin/ryu-manager",  // 将 ryu-manager 作为要运行的程序
+            "args": ["${workspaceFolder}/custom/secondApplication.py"],  // 将 Python 文件路径作为参数传递
+            "console": "integratedTerminal"
+        }
+    ]
+}
