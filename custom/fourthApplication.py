@@ -11,7 +11,7 @@ class SimpleSwitch(app_manager.RyuApp):
     # 選擇支援的openFlow版本，可不只一個版本
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
     LOGGER_NAME = 'Forth_Application'
-    LOG_PATH = f'./custom/{LOGGER_NAME}.log'
+    LOG_PATH = f'./custom/log/{LOGGER_NAME}.log'
 
     def __init__(self, *args, **kwargs):
         super(SimpleSwitch, self).__init__(*args, **kwargs)
