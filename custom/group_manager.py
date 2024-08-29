@@ -1,13 +1,19 @@
 import json
 import os
+import logging
 
 class GroupManager:
-    def __init__(self, json_file='multicast_groups.json'):
+    def __init__(self, json_file='multicast_groups.json', logger=None):
         self.group_cache = {}
-        self.json_file = json_file
-        if os.path.exists(json_file):
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        self.json_file = os.path.join(base_dir, json_file)
+        self.logger = logger or logging.getLogger(__name__)
+        
+        if os.path.exists(self.json_file):
+            self.logger.info("Loading group json file")
             self.load_groups_from_json()
         else:
+            self.logger.info("JSON file not found, initializing empty group list")
             self.groups = {}
 
     def load_groups_from_json(self):
@@ -33,8 +39,10 @@ class GroupManager:
 
     def get_or_create_group(self, datapath, multicast_ip, ports):
         if multicast_ip in self.group_cache:
+            self.logger.info("Getting Group")
             group_id = self.group_cache[multicast_ip]
         else:
+            self.logger.info("Creating Group")
             group_id = hash(multicast_ip) % (2**32)
             self.add_group(datapath, group_id, ports)
             self.group_cache[multicast_ip] = group_id

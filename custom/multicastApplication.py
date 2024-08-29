@@ -57,6 +57,7 @@ class MulticastSwitch(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def _packet_in_handler(self, ev):
+        # 獲取 packet 資料
         msg = ev.msg
         datapath = msg.datapath
         ofproto = datapath.ofproto
@@ -66,6 +67,7 @@ class MulticastSwitch(app_manager.RyuApp):
         pkt = packet.Packet(msg.data)
         eth = pkt.get_protocols(ethernet.ethernet)[0]
 
+        # 若是 arp 指令，則執行最基本的路由
         if eth.ethertype == ether_types.ETH_TYPE_ARP:
             self.handle_unicast(datapath, in_port, pkt, 'arp')
 
@@ -73,9 +75,12 @@ class MulticastSwitch(app_manager.RyuApp):
             ip_pkt = pkt.get_protocol(ipv4.ipv4)
             dst = ip_pkt.dst
 
+            # 判斷是否是 multicast 指令，，且我們知道要往哪傳，如果是，則執行 multicast
             if dst in self.group_manager.groups:
+                self.logger.info("Dealing with multicast, src_mac:%s, dst_mac:%s", eth.src, eth.dst)
                 self.handle_multicast(datapath, self.group_manager.get_multicast_ports(dst), pkt, dst)
             else:
+                self.logger.info("Dealing with unicast, src_mac:%s, dst_mac:%s", eth.src, eth.dst)
                 self.handle_unicast(datapath, in_port, pkt, dst)
 
     def handle_multicast(self, datapath, ports, pkt, multicast_ip):
