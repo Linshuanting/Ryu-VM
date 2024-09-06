@@ -41,6 +41,7 @@ class MulticastSwitch(app_manager.RyuApp):
         # processing some informations.
         datapath = ev.msg.datapath
         openFlowProtocol = datapath.ofproto
+        ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
 
         # searching suitable match field, without any parameters in paretheses means all parameter should be the same.
@@ -53,6 +54,27 @@ class MulticastSwitch(app_manager.RyuApp):
         self.logger.info('---Switch Feature handler start---')
         # add the flow entry to switch, the parameter is : switch_id, priority, match, actions
         self.add_flow(datapath, 0, match, actions)
+
+        group_id = hash("ff38::1") % (2**32)
+        buckets = []
+
+        # 为组创建输出端口（例如，将其发送到端口 2 和 3）
+        actions1 = [parser.OFPActionOutput(2)]
+        buckets.append(parser.OFPBucket(actions=actions1))
+        actions2 = [parser.OFPActionOutput(3)]
+        buckets.append(parser.OFPBucket(actions=actions2))
+
+        # 创建并发送组表请求
+        req = parser.OFPGroupMod(datapath, ofproto.OFPFC_ADD,
+                                 ofproto.OFPGT_ALL, group_id, buckets)
+        datapath.send_msg(req)
+
+        match = parser.OFPMatch(eth_type=0x86DD, ipv6_dst="ff38::1")
+
+        # 使用组 ID 作为动作
+        actions = [parser.OFPActionGroup(group_id)]
+        self.add_flow(datapath, 1, match, actions)
+
     
     def add_flow(self, datapath, priority, match, actions, buffer_id=None):
         ofproto = datapath.ofproto
