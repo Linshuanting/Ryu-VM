@@ -104,8 +104,7 @@ class ICMPv6RyuController(app_manager.RyuApp):
 
         # 如果是 mDNS 訊息的話，將其多播出去
         if dst_ip == 'ff02::fb':
-            ports = [out_port for out_port in datapath.ports if out_port != in_port]
-            self.send_multicast_pkt(datapath, ports, dst_ip, in_port, pkt)
+            self.send_default_multicast_pkt(datapath, dst_ip, in_port, pkt)
             return
 
         if self.group_manager.is_ipv6_in_groups(dst_ip) is False:
@@ -130,6 +129,25 @@ class ICMPv6RyuController(app_manager.RyuApp):
         self.add_flow(datapath, 1, match, actions)
 
         self.send_packet(datapath, in_port, pkt, actions)
+
+    def send_default_multicast_pkt(self, datapath, dst_ip, in_port, pkt):
+        # 取得所有端口（除了 in_port）
+        ports = [port_no for port_no in datapath.ports.keys() if port_no != in_port]
+
+        # 使用字串串接方式計算 group_id
+        group_id = hash(f"{in_port}-{dst_ip}") % (2**32)
+        self.group_manager.add_group(datapath, group_id, ports)
+
+        parser = datapath.ofproto_parser
+        match = parser.OFPMatch(in_port=in_port,
+                            eth_type=ether_types.ETH_TYPE_IPV6, 
+                            ipv6_dst=dst_ip)
+
+        actions = [parser.OFPActionGroup(group_id)]
+        self.add_flow(datapath, 1, match, actions)
+
+        self.send_packet(datapath, in_port, pkt, actions)
+
 
     def handle_icmpv6(self, datapath, icmpv6_pkt, ipv6_pkt, in_port, pkt):
 
