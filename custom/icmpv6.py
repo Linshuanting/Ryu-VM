@@ -51,8 +51,8 @@ class ICMPv6RyuController(app_manager.RyuApp):
         parser = datapath.ofproto_parser
         in_port = msg.match['in_port']
 
-        self.logger.info("Packet received from switch with DPID: %s on port: %s", datapath.id, in_port)
-
+        # 確認 packet 來自哪個 switch 的哪個 port
+        #self.logger.info("Packet received from switch with DPID: %s on port: %s", datapath.id, in_port)
 
         pkt = packet.Packet(msg.data)
         eth = pkt.get_protocol(ethernet.ethernet)
@@ -156,7 +156,7 @@ class ICMPv6RyuController(app_manager.RyuApp):
 
         # 忽略 DAD NS Message 
         if src == "::":
-            self.logger.info("Ignoring DAD NS message with unspecified source address.")
+            # self.logger.info("Ignoring DAD NS message with unspecified source address.")
             return
 
         # 根據 ICMPv6 類型進行處理，只有未紀錄在 switch 才需要到控制器詢問該送往哪裡
