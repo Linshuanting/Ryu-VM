@@ -3,7 +3,7 @@ from ryu.controller import ofp_event
 from ryu.controller.handler import CONFIG_DISPATCHER, MAIN_DISPATCHER
 from ryu.controller.handler import set_ev_cls
 from ryu.ofproto import ofproto_v1_3, ofproto_v1_5
-import utils.myparser 
+import myparser 
 
 class SimpleSwitch(app_manager.RyuApp):
     
@@ -48,50 +48,41 @@ class SimpleSwitch(app_manager.RyuApp):
         ofp = datapath.ofproto
         parser = datapath.ofproto_parser
 
-        port = 1
-        max_len = 2000
-        actions = [parser.OFPActionOutput(port)]
-
-        print(f"Actions: {actions}")
-
-
+        ports = [1]
         weight = 100
         watch_port = 0
         watch_group = 0
-        a = parser.OFPGroupBucketPropWeight(type_= ofp.OFPGBPT_WEIGHT, weight=weight)
-        b = parser.OFPGroupBucketPropWeight(type_= ofp.OFPGBPT_WEIGHT, weight=weight)
-        c = parser.OFPGroupBucketPropWatch(watch=watch_port)
-        d = parser.OFPGroupBucketPropWatch(watch=watch_group)
-        properties = [a, b]
-        buckets = [parser.OFPBucket(actions=actions, properties=properties)]
+        buckets = []
 
-        print(f"Buckets: {buckets}")
+        for port in ports:
+            actions = [parser.OFPActionOutput(port)]
+            # 為每個端口創建一個桶
 
-        selection_method='dp_hash' # 指定选择方法为hash
-        selection_method_num = '0xabcd' # dp hash
+            print(f"Actions: {actions}")
+
+
+            # 只對 group type = select 有效果
+            a = parser.OFPGroupBucketPropWeight(type_= ofp.OFPGBPT_WEIGHT, weight=weight)
+            # 只對 Group type = Fast failover 有效果
+            c = parser.OFPGroupBucketPropWatch(watch=watch_port)
+            d = parser.OFPGroupBucketPropWatch(watch=watch_group)
+
+            properties = [a]
+            bucket = parser.OFPBucket(actions=actions, properties=properties)
+            buckets.append(bucket)
+
+            print(f"Buckets: {buckets}")
+        
+
+        selection_method='hash' # 指定选择方法为hash
         selection_method_param=0  # 使用默认的哈希参数
         fields=[ofp.OXM_OF_IPV6_FLABEL] 
-
-        myparser = utils.myparser
-
-        # a = myparser.OFPGroupPropSelectionMethod(
-        #     type_=myparser.OFPGPT_SELECT_METHOD,
-        #     method=selection_method
-        #     )
-        # b = myparser.OFPGroupPropSelectionParam(
-        #     type_=myparser.OFPGPT_SELECT_PARAM, 
-        #     param=selection_method_param
-        # )
-        # c = myparser.OFPGroupPropSelectionField(
-        #     type_=myparser.OFPGPT_SELECT_FIELDS,
-        #     fields=fields
-        # )
-        # properties_b = [a, c]
 
         b = myparser.OFPGroupPropExperimenter(
             type_=ofp.OFPGPT_EXPERIMENTER,
             selection_method=selection_method,
-            selection_method_param = 0
+            selection_method_param = selection_method_param,
+            fields=fields
             )
         
         properties = [b]

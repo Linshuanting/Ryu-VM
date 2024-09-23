@@ -1,7 +1,7 @@
 import json
 import os
 import logging
-from myparser import OFPGroupPropSelectionMethod
+from myparser import OFPGroupPropExperimenter
 
 class GroupManager:
     def __init__(self, json_file='group.json', logger=None):
@@ -77,7 +77,14 @@ class GroupManager:
         selection_method_param=0  # 使用默认的哈希参数
         fields=[ofproto.OXM_OF_IPV6_FLABEL]  # 使用IPv6 Flow Label作为哈希字段
 
-        properties = [OFPGroupPropSelectionMethod(selection_method, selection_method_param, fields)]
+        property = OFPGroupPropExperimenter(
+            type_=ofproto.OFPGPT_EXPERIMENTER,
+            selection_method=selection_method,
+            selection_method_param = selection_method_param,
+            fields=fields
+        )
+
+        properties = [property]
         
         print("-- sending path --")
         req = parser.OFPGroupMod(
@@ -85,8 +92,8 @@ class GroupManager:
             command=ofproto.OFPGC_ADD,
             type_=ofproto.OFPGT_SELECT,
             group_id=group_id,
-            buckets=buckets
-            #properties
+            buckets=buckets,
+            properties=properties
         )
         print(f"Sending OFPGroupMod with group_id={group_id}, type={ofproto.OFPGT_SELECT}, buckets={buckets}")
         datapath.send_msg(req)
