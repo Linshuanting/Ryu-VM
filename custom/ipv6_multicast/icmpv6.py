@@ -81,89 +81,6 @@ class ICMPv6RyuController(app_manager.RyuApp):
             self.logger.info("Received UDP traffic from %s to %s", ipv6_pkt.src, ipv6_pkt.dst)
             self.handle_udp(datapath, ipv6_pkt, in_port, pkt) 
 
-        
-    def handle_udp(self, datapath, ipv6_pkt, in_port, pkt):
-        
-        dst = ipv6_pkt.dst
-
-        if self.is_ipv6_multicast(dst):
-            self.logger.info("Received IPv6 multicast traffic from %s to %s", ipv6_pkt.src, ipv6_pkt.dst)
-            self.handle_multicast(datapath, ipv6_pkt, in_port, pkt)
-            return
-        
-        if self.is_ipv6_multipath(dst, datapath.id):
-            # 暫定
-            self.logger.info("Received IPv6 multipath traffic from %s to %s", ipv6_pkt.src, ipv6_pkt.dst)
-            return
-
-        self.handle_ipv6(datapath, in_port, pkt, dst)
-
-    # 暫定
-    def is_ipv6_multipath(self, dst_ip, switch_id):
-        return self.group_manager.is_ipv6_in_groups(dst_ip, switch_id)
-    
-    def handle_multipath(self, datapath, ipv6_pkt, in_port, pkt):
-        
-        switch_id = datapath.id
-        parser = datapath.ofproto_parser
-        dst_ip = ipv6_pkt.dst
-
-    def is_ipv6_multicast(self, ip):
-        # IPv6 multicast addresses start with 'ff'
-        return ip.lower().startswith('ff')
-
-    def handle_multicast(self, datapath, ipv6_pkt, in_port, pkt):
-        
-        switch_id = datapath.id
-        parser = datapath.ofproto_parser
-        dst_ip = ipv6_pkt.dst
-
-        # 如果是 mDNS 訊息的話，將其多播出去
-        if dst_ip == 'ff02::fb':
-            self.send_default_multicast_pkt(datapath, dst_ip, in_port, pkt)
-            return
-
-        if self.group_manager.is_ipv6_in_groups(switch_id, dst_ip) is False:
-            self.logger.info("Multicast IPv6 is not in Groups")
-            return
-
-        ports = self.group_manager.get_multicast_ports(switch_id, dst_ip, ipv6=True)
-        
-        self.send_multicast_pkt(datapath, ports, dst_ip, in_port, pkt)
-
-    def send_multicast_pkt(self, datapath, ports, dst_ip, in_port, pkt):
-        
-        switch_id = datapath.id
-        group_id = self.group_manager.get_or_create_group(datapath, dst_ip, ports, switch_id)
-        
-        parser = datapath.ofproto_parser
-        match = parser.OFPMatch(in_port=in_port,
-                                eth_type=ether_types.ETH_TYPE_IPV6, 
-                                ipv6_dst=dst_ip)
-
-        actions = [parser.OFPActionGroup(group_id)]
-        self.add_flow(datapath, 1, match, actions)
-
-        self.send_packet(datapath, in_port, pkt, actions)
-
-    def send_default_multicast_pkt(self, datapath, dst_ip, in_port, pkt):
-        # 取得所有端口（除了 in_port）
-        ports = [port_no for port_no in datapath.ports.keys() if port_no != in_port]
-
-        # 使用字串串接方式計算 group_id
-        group_id = hash(f"{in_port}-{dst_ip}") % (2**32)
-        self.group_manager.add_group(datapath, group_id, ports)
-
-        parser = datapath.ofproto_parser
-        match = parser.OFPMatch(in_port=in_port,
-                            eth_type=ether_types.ETH_TYPE_IPV6, 
-                            ipv6_dst=dst_ip)
-
-        actions = [parser.OFPActionGroup(group_id)]
-        self.add_flow(datapath, 1, match, actions)
-
-        self.send_packet(datapath, in_port, pkt, actions)
-
     def handle_icmpv6(self, datapath, icmpv6_pkt, ipv6_pkt, in_port, pkt):
 
         src = ipv6_pkt.src
@@ -198,6 +115,125 @@ class ICMPv6RyuController(app_manager.RyuApp):
         # elif icmpv6_pkt.type_ == icmpv6.ND_ROUTER_ADVERT:
         #     self.logger.info("Received Router Advertisement (RA) from %s", ipv6_pkt.src)
         #     # 處理路由器通告的邏輯
+
+    def handle_udp(self, datapath, ipv6_pkt, in_port, pkt):
+        
+        dst = ipv6_pkt.dst
+
+        if self.is_ipv6_multicast(dst):
+            self.logger.info("Received IPv6 multicast traffic from %s to %s", ipv6_pkt.src, ipv6_pkt.dst)
+            self.handle_multicast(datapath, ipv6_pkt, in_port, pkt)
+            return
+        
+        if self.is_ipv6_multipath(dst, datapath.id):
+            # 暫定
+            self.logger.info("Received IPv6 multipath traffic from %s to %s", ipv6_pkt.src, ipv6_pkt.dst)
+            return
+
+        self.handle_ipv6(datapath, in_port, pkt, dst)
+
+    def handle_multicast(self, datapath, ipv6_pkt, in_port, pkt):
+        
+        switch_id = datapath.id
+        parser = datapath.ofproto_parser
+        dst_ip = ipv6_pkt.dst
+
+        # 如果是 mDNS 訊息的話，將其多播出去
+        if dst_ip == 'ff02::fb':
+            self.send_default_multicast_pkt(datapath, dst_ip, in_port, pkt)
+            return
+
+        if self.group_manager.is_ipv6_in_groups(switch_id, dst_ip) is False:
+            self.logger.info("Multicast IPv6 is not in Groups")
+            return
+
+        ports = self.group_manager.get_multicast_ports(switch_id, dst_ip, ipv6=True)
+        
+        self.send_multicast_pkt(datapath, ports, dst_ip, in_port, pkt)
+    
+    def handle_multipath(self, datapath, ipv6_pkt, in_port, pkt):
+        
+        switch_id = datapath.id
+        parser = datapath.ofproto_parser
+        dst_ip = ipv6_pkt.dst
+
+    def handle_ipv6(self, datapath, in_port, pkt, dst_ip):
+        
+        self.logger.info('Deal with in_port:%s, dst_ip:%s', in_port, dst_ip)
+        
+        parser = datapath.ofproto_parser
+        eth = pkt.get_protocols(ethernet.ethernet)[0]
+        dst_mac = eth.dst
+        src_mac = eth.src
+        datapath_id = datapath.id
+        self.mac_to_port.setdefault(datapath_id, {})
+        self.mac_to_port[datapath_id][src_mac] = in_port
+
+        if dst_mac in self.mac_to_port[datapath.id]:
+            out_port = self.mac_to_port[datapath.id][dst_mac]
+        else:
+            out_port = datapath.ofproto.OFPP_FLOOD
+
+        actions = [parser.OFPActionOutput(out_port)]
+
+        if out_port != datapath.ofproto.OFPP_FLOOD:
+            match = parser.OFPMatch(in_port=in_port, eth_dst=dst_mac)
+            self.add_flow(datapath, 1, match, actions)
+
+        self.send_packet(datapath, in_port, pkt, actions)
+    
+    def send_multicast_pkt(self, datapath, ports, dst_ip, in_port, pkt):
+        
+        switch_id = datapath.id
+        group_id = self.group_manager.get_or_create_group(datapath, dst_ip, ports, switch_id)
+        
+        parser = datapath.ofproto_parser
+        match = parser.OFPMatch(in_port=in_port,
+                                eth_type=ether_types.ETH_TYPE_IPV6, 
+                                ipv6_dst=dst_ip)
+
+        actions = [parser.OFPActionGroup(group_id)]
+        self.add_flow(datapath, 1, match, actions)
+
+        self.send_packet(datapath, in_port, pkt, actions)
+
+    def send_default_multicast_pkt(self, datapath, dst_ip, in_port, pkt):
+        # 取得所有端口（除了 in_port）
+        ports = [port_no for port_no in datapath.ports.keys() if port_no != in_port]
+
+        # 使用字串串接方式計算 group_id
+        group_id = hash(f"{in_port}-{dst_ip}") % (2**32)
+        self.group_manager.add_group(datapath, group_id, ports)
+
+        parser = datapath.ofproto_parser
+        match = parser.OFPMatch(in_port=in_port,
+                            eth_type=ether_types.ETH_TYPE_IPV6, 
+                            ipv6_dst=dst_ip)
+
+        actions = [parser.OFPActionGroup(group_id)]
+        self.add_flow(datapath, 1, match, actions)
+
+        self.send_packet(datapath, in_port, pkt, actions)
+
+    # Openflow13 的部分，out 裡面放在的 in_port
+    def send_packet(self, datapath, in_port, pkt, actions):
+        parser = datapath.ofproto_parser
+        data = pkt.data
+        out = parser.OFPPacketOut(
+            datapath=datapath, 
+            buffer_id=datapath.ofproto.OFP_NO_BUFFER,
+            in_port=in_port, 
+            actions=actions, 
+            data=data)
+        datapath.send_msg(out)
+
+    def is_ipv6_multicast(self, ip):
+        # IPv6 multicast addresses start with 'ff'
+        return ip.lower().startswith('ff')
+
+    # 暫定
+    def is_ipv6_multipath(self, dst_ip, switch_id):
+        return self.group_manager.is_ipv6_in_groups(dst_ip, switch_id)
 
     def send_icmpv6_reply(self, datapath, pkt, eth, ipv6_pkt, icmpv6_pkt, in_port):
         ofproto = datapath.ofproto
@@ -235,39 +271,3 @@ class ICMPv6RyuController(app_manager.RyuApp):
 
         actions = [parser.OFPActionOutput(in_port)]
         self.send_packet(datapath, in_port, reply_pkt, actions)
-        
-    def handle_ipv6(self, datapath, in_port, pkt, dst_ip):
-        
-        self.logger.info('Deal with in_port:%s, dst_ip:%s', in_port, dst_ip)
-        
-        parser = datapath.ofproto_parser
-        eth = pkt.get_protocols(ethernet.ethernet)[0]
-        dst_mac = eth.dst
-        src_mac = eth.src
-        datapath_id = datapath.id
-        self.mac_to_port.setdefault(datapath_id, {})
-        self.mac_to_port[datapath_id][src_mac] = in_port
-
-        if dst_mac in self.mac_to_port[datapath.id]:
-            out_port = self.mac_to_port[datapath.id][dst_mac]
-        else:
-            out_port = datapath.ofproto.OFPP_FLOOD
-
-        actions = [parser.OFPActionOutput(out_port)]
-
-        if out_port != datapath.ofproto.OFPP_FLOOD:
-            match = parser.OFPMatch(in_port=in_port, eth_dst=dst_mac)
-            self.add_flow(datapath, 1, match, actions)
-
-        self.send_packet(datapath, in_port, pkt, actions)
-
-    def send_packet(self, datapath, in_port, pkt, actions):
-        parser = datapath.ofproto_parser
-        data = pkt.data
-        out = parser.OFPPacketOut(
-            datapath=datapath, 
-            buffer_id=datapath.ofproto.OFP_NO_BUFFER,
-            in_port=in_port, 
-            actions=actions, 
-            data=data)
-        datapath.send_msg(out)

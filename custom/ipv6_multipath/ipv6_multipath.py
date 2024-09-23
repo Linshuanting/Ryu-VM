@@ -19,6 +19,7 @@ class ICMPv6RyuController(app_manager.RyuApp):
         self.mac_to_port = {}
         self.group_manager = GroupManager()  # 实例化 GroupManager
         self.loop_detection_tables = {}
+        self.count = 1
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
@@ -35,6 +36,12 @@ class ICMPv6RyuController(app_manager.RyuApp):
         dpid = datapath.id
         self.loop_detection_tables[dpid] = LoopDetectionTable(timeout=2)  # 為該 switch 創建獨立的檢測表
     
+        print("------- test select group adding ----------")
+        self.group_manager.add_group(datapath, self.count, [2])
+        self.count+=1
+        self.group_manager.add_select_group_with_hash_flabel(datapath, self.count, [2,3])
+        self.count+=1
+
     def add_flow(self, datapath, priority, match, actions, buffer_id=None):
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
@@ -51,6 +58,7 @@ class ICMPv6RyuController(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def packet_in_handler(self, ev):
+
         msg = ev.msg
         datapath = msg.datapath
         ofproto = datapath.ofproto
@@ -87,22 +95,6 @@ class ICMPv6RyuController(app_manager.RyuApp):
             # self.logger.info("Received UDP traffic from %s to %s", ipv6_pkt.src, ipv6_pkt.dst)
             self.handle_udp(datapath, ipv6_pkt, in_port, pkt) 
 
-    def detect_duplicated(self, dpid, msg):
-        # 檢查該 switch 的循環檢測表是否存在
-        if dpid not in self.loop_detection_tables:
-            self.loop_detection_tables[dpid] = LoopDetectionTable(timeout=2)
-
-        # 檢查封包是否是循環的
-        loop_detection_table = self.loop_detection_tables[dpid]
-        if loop_detection_table.is_packet_duplicate(msg.data):
-            self.logger.info(f"Dropping duplicate packet on switch {dpid} to prevent loop")
-            return True # 丟棄封包
-
-        # 添加封包到該 switch 的循環檢測表
-        loop_detection_table.add_packet(msg.data)
-
-        return False
-        
     def handle_udp(self, datapath, ipv6_pkt, in_port, pkt):
         
         dst = ipv6_pkt.dst
@@ -114,8 +106,6 @@ class ICMPv6RyuController(app_manager.RyuApp):
         
         self.logger.info("----- In Switch:%s -------", datapath.id)
 
-        print(f"multipath_ipv6:{dst}, is {self.is_ipv6_multipath(datapath.id, dst)}")
-
         if self.is_ipv6_multipath(datapath.id, dst):
             # 暫定
             self.logger.info("Received IPv6 multipath traffic from %s to %s", ipv6_pkt.src, ipv6_pkt.dst)
@@ -124,43 +114,24 @@ class ICMPv6RyuController(app_manager.RyuApp):
 
         self.handle_ipv6(datapath, in_port, pkt, dst)
 
-    # 暫定
-    def is_ipv6_multipath(self, switch_id, dst_ip):
-        return self.group_manager.is_ipv6_in_groups(switch_id, dst_ip)
-    
     def handle_multipath(self, datapath, ipv6_pkt, in_port, pkt):
         
         switch_id = datapath.id
         parser = datapath.ofproto_parser
         dst_ip = ipv6_pkt.dst
 
-        flow_label = ipv6_pkt.flow_label
-        self.logger.info(f"flow label: {flow_label}")
-
         ports = self.group_manager.get_multipath_ports(switch_id, dst_ip, ipv6=True)
-        output_port = self.select_output_port(flow_label, ports)
-        self.logger.info(f"output port: {output_port}")
-        actions = [parser.OFPActionOutput(output_port)]
+        
+        group_id = self.group_manager.get_or_create_select_group_with_hash_flabel(datapath, dst_ip, ports, switch_id)
 
-        #match = parser.OFPMatch(eth_type=ether_types.ETH_TYPE_IPV6, in_port=in_port, ipv6_flow_label=flow_label)
         match = parser.OFPMatch(in_port=in_port,
-                                eth_type=ether_types.ETH_TYPE_IPV6,
-                                ipv6_flabel=flow_label, 
+                                eth_type=ether_types.ETH_TYPE_IPV6, 
                                 ipv6_dst=dst_ip)
-        print(f"This is match {match}")
+        
+        actions = [parser.OFPActionGroup(group_id)]
         self.add_flow(datapath, 1, match, actions)
 
         self.send_packet(datapath, in_port, pkt, actions)
-
-
-    def select_output_port(self, flow_label, ports):
-        # Use flow label modulus to decide output port
-        return ports[flow_label % len(ports)] 
-
-    def is_ipv6_multicast(self, ip):
-        # IPv6 multicast addresses start with 'ff'
-        return ip.lower().startswith('ff')
-
 
     def handle_icmpv6(self, datapath, icmpv6_pkt, ipv6_pkt, in_port, pkt, msg):
 
@@ -226,6 +197,34 @@ class ICMPv6RyuController(app_manager.RyuApp):
             self.add_flow(datapath, 1, match, actions)
 
         self.send_packet(datapath, in_port, pkt, actions)
+
+    def detect_duplicated(self, dpid, msg):
+        # 檢查該 switch 的循環檢測表是否存在
+        if dpid not in self.loop_detection_tables:
+            self.loop_detection_tables[dpid] = LoopDetectionTable(timeout=2)
+
+        # 檢查封包是否是循環的
+        loop_detection_table = self.loop_detection_tables[dpid]
+        if loop_detection_table.is_packet_duplicate(msg.data):
+            self.logger.info(f"Dropping duplicate packet on switch {dpid} to prevent loop")
+            return True # 丟棄封包
+
+        # 添加封包到該 switch 的循環檢測表
+        loop_detection_table.add_packet(msg.data)
+
+        return False
+    
+    def select_output_port(self, flow_label, ports):
+            # Use flow label modulus to decide output port
+            return ports[flow_label % len(ports)] 
+    
+    # 暫定
+    def is_ipv6_multipath(self, switch_id, dst_ip):
+        return self.group_manager.is_ipv6_in_groups(switch_id, dst_ip)
+
+    def is_ipv6_multicast(self, ip):
+        # IPv6 multicast addresses start with 'ff'
+        return ip.lower().startswith('ff')
 
     def send_packet(self, datapath, in_port, pkt, actions):
         parser = datapath.ofproto_parser

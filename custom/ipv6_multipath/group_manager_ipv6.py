@@ -1,6 +1,7 @@
 import json
 import os
 import logging
+from myparser import OFPGroupPropSelectionMethod
 
 class GroupManager:
     def __init__(self, json_file='group.json', logger=None):
@@ -40,6 +41,28 @@ class GroupManager:
         
     def add_group(self, datapath, group_id, ports):
         """向交換機添加多播組"""
+        print (f"-- Switch {datapath.id} --")
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+        buckets = []
+
+        for port in ports:
+            actions = [parser.OFPActionOutput(port)]
+            # 為每個端口創建一個桶
+
+            bucket = parser.OFPBucket(actions=actions)
+            buckets.append(bucket)
+
+        # 創建多播組，並發送至交換機
+        req = parser.OFPGroupMod(datapath=datapath, 
+                                 command=ofproto.OFPGC_ADD,
+                                 type_=ofproto.OFPGT_ALL, 
+                                 group_id=group_id, 
+                                 buckets=buckets)
+        datapath.send_msg(req)
+
+    def add_select_group_with_hash_flabel(self, datapath, group_id, ports):
+        """向交換機添加多播組"""
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         buckets = []
@@ -50,13 +73,24 @@ class GroupManager:
             bucket = parser.OFPBucket(actions=actions)
             buckets.append(bucket)
 
-        # 創建多播組，並發送至交換機
-        req = parser.OFPGroupMod(datapath=datapath, 
-                                 command=ofproto.OFPFC_ADD,
-                                 type_=ofproto.OFPGT_ALL, 
-                                 group_id=group_id, 
-                                 buckets=buckets)
+        selection_method='hash'  # 指定选择方法为hash
+        selection_method_param=0  # 使用默认的哈希参数
+        fields=[ofproto.OXM_OF_IPV6_FLABEL]  # 使用IPv6 Flow Label作为哈希字段
+
+        properties = [OFPGroupPropSelectionMethod(selection_method, selection_method_param, fields)]
+        
+        print("-- sending path --")
+        req = parser.OFPGroupMod(
+            datapath=datapath,
+            command=ofproto.OFPGC_ADD,
+            type_=ofproto.OFPGT_SELECT,
+            group_id=group_id,
+            buckets=buckets
+            #properties
+        )
+        print(f"Sending OFPGroupMod with group_id={group_id}, type={ofproto.OFPGT_SELECT}, buckets={buckets}")
         datapath.send_msg(req)
+
 
     def get_or_create_group(self, datapath, multicast_ip, ports, switch_id):
         """獲取或創建群組"""
@@ -68,6 +102,19 @@ class GroupManager:
             self.logger.info(f"Creating new group for {multicast_ip} on switch {switch_id}")
             group_id = hash(key) % (2**32)
             self.add_group(datapath, group_id, ports)
+            self.group_cache[key] = group_id
+        return group_id
+    
+    def get_or_create_select_group_with_hash_flabel(self, datapath, multipath_ip, ports, switch_id):
+        """獲取或創建群組"""
+        key = (switch_id, multipath_ip)
+        if key in self.group_cache:
+            self.logger.info(f"Getting existing group for {multipath_ip} on switch {switch_id}")
+            group_id = self.group_cache[key]
+        else:
+            self.logger.info(f"Creating new group for {multipath_ip} on switch {switch_id}")
+            group_id = hash(key) % (2**32)
+            self.add_select_group_with_hash_flabel(datapath, group_id, ports)
             self.group_cache[key] = group_id
         return group_id
 

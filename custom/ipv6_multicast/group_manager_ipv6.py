@@ -52,7 +52,7 @@ class GroupManager:
 
         # 創建多播組，並發送至交換機
         req = parser.OFPGroupMod(datapath=datapath, 
-                                 command=ofproto.OFPFC_ADD,
+                                 command=ofproto.OFPGC_ADD,
                                  type_=ofproto.OFPGT_ALL, 
                                  group_id=group_id, 
                                  buckets=buckets)
