@@ -53,6 +53,7 @@ class SimpleSwitch(app_manager.RyuApp):
         watch_port = 0
         watch_group = 0
         buckets = []
+        bucket_id = 0
 
         for port in ports:
             actions = [parser.OFPActionOutput(port)]
@@ -68,21 +69,37 @@ class SimpleSwitch(app_manager.RyuApp):
             d = parser.OFPGroupBucketPropWatch(watch=watch_group)
 
             properties = [a]
-            bucket = parser.OFPBucket(actions=actions, properties=properties)
+            bucket = parser.OFPBucket(
+                actions=actions,
+                bucket_id = bucket_id, 
+                properties=properties)
             buckets.append(bucket)
+
+            bucket_id+=1
 
             print(f"Buckets: {buckets}")
         
 
         selection_method='hash' # 指定选择方法为hash
         selection_method_param=0  # 使用默认的哈希参数
-        fields=[ofp.OXM_OF_IPV6_FLABEL] 
+        
+
+        fields=[ofp.OXM_OF_IPV6_FLABEL_W,
+                # ofp.OXM_OF_IPV6_SRC
+                # ofp.OXM_OF_IPV6_DST
+                # ofp.OXM_OF_ARP_TPA
+                # ofp.OXM_OF_IPV6_SRC,  # IPv6 源地址
+                # ofp.OXM_OF_IPV6_DST,  # IPv6 目的地址
+                # ofp.OXM_OF_TCP_SRC,   # TCP 源端口
+                # ofp.OXM_OF_TCP_DST    # TCP 目的端口
+        ]
 
         b = myparser.OFPGroupPropExperimenter(
             type_=ofp.OFPGPT_EXPERIMENTER,
             selection_method=selection_method,
             selection_method_param = selection_method_param,
-            fields=fields
+            ipv6_flabel=myparser.OFP_GROUP_PROP_FIELD_MATCH_ALL_IPV6_FLABEL,
+            ipv6_src=myparser.OFP_GROUP_PROP_FIELD_MATCH_ALL_IPV6_SRC
             )
         
         properties = [b]
@@ -97,8 +114,8 @@ class SimpleSwitch(app_manager.RyuApp):
                                     buckets=buckets,
                                     properties=properties
                                     )
-        print(f"Sending OFPGroupMod with group_id={group_id}, type={ofp.OFPGT_SELECT}, prop={properties}")
+        # print(f"Sending OFPGroupMod with group_id={group_id}, type={ofp.OFPGT_SELECT}, prop={properties}")
         # print(f"req length: {len(req.serialize())}")
         datapath.send_msg(req)
 
-
+    

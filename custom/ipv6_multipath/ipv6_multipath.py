@@ -35,12 +35,6 @@ class ICMPv6RyuController(app_manager.RyuApp):
          # 初始化該 switch 的循環檢測表
         dpid = datapath.id
         self.loop_detection_tables[dpid] = LoopDetectionTable(timeout=2)  # 為該 switch 創建獨立的檢測表
-    
-        print("------- test select group adding ----------")
-        self.group_manager.add_group(datapath, self.count, [2])
-        self.count+=1
-        self.group_manager.add_select_group_with_hash_flabel(datapath, self.count, [2,3])
-        self.count+=1
 
     def add_flow(self, datapath, priority, match, actions, buffer_id=None):
         ofproto = datapath.ofproto
@@ -129,7 +123,7 @@ class ICMPv6RyuController(app_manager.RyuApp):
                                 ipv6_dst=dst_ip)
         
         actions = [parser.OFPActionGroup(group_id)]
-        self.add_flow(datapath, 1, match, actions)
+        self.add_flow(datapath, 2, match, actions)
 
         self.send_packet(datapath, in_port, pkt, actions)
 

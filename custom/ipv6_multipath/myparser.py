@@ -31,8 +31,8 @@ NETRONOME_VENDER_ID = 0x0000154d
 @OFPGroupProp.register_type(ofproto.OFPGPT_EXPERIMENTER)
 class OFPGroupPropExperimenter(OFPPropCommonExperimenter4ByteData):
     def __init__(self, type_=None, length=None, experimenter=NETRONOME_VENDER_ID,
-                  exp_type=NTRT_SELECTION_METHOD, selection_method="hash", selection_method_param=0,
-                  fields=None):
+                  exp_type=NTRT_SELECTION_METHOD, selection_method="hash",
+                  selection_method_param=0, fields=None):
         super(OFPGroupPropExperimenter, self).__init__(type_, length)
         self.experimenter = experimenter # Netronome Vendor ID
         self.exp_type = exp_type # NTRT_SELECTION_METHOD
@@ -63,6 +63,8 @@ class OFPGroupPropExperimenter(OFPPropCommonExperimenter4ByteData):
         for field in self.fields:
             msg_pack_into('!I', fields_data, len(fields_data), field)
         
+        print(f"field buf: {fields_data.hex()}")
+
         # 计算总长度并填充
         self.length = OFP_GROUP_PROP_EXPERIMENTER_SIZE + len(fields_data)
         padding_length = (8 - (self.length % 8)) % 8
@@ -77,6 +79,8 @@ class OFPGroupPropExperimenter(OFPPropCommonExperimenter4ByteData):
 
         # 追加 padding
         if padding_length > 0:
-            buf.extend(b'\x00' * padding_length)
+            buf.extend(b'\xff' * padding_length)
+
+        print(f"The packet: {buf.hex()}")
 
         return buf

@@ -45,13 +45,17 @@ class GroupManager:
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         buckets = []
+        bucket_id=0
 
         for port in ports:
             actions = [parser.OFPActionOutput(port)]
             # 為每個端口創建一個桶
 
-            bucket = parser.OFPBucket(actions=actions)
+            bucket = parser.OFPBucket(
+                actions=actions,
+                bucket_id=bucket_id)
             buckets.append(bucket)
+            bucket_id+=1
 
         # 創建多播組，並發送至交換機
         req = parser.OFPGroupMod(datapath=datapath, 
@@ -66,12 +70,16 @@ class GroupManager:
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         buckets = []
+        bucket_id = 0
 
         for port in ports:
             actions = [parser.OFPActionOutput(port)]
             # 為每個端口創建一個桶
-            bucket = parser.OFPBucket(actions=actions)
+            bucket = parser.OFPBucket(
+                actions=actions,
+                bucket_id=bucket_id)
             buckets.append(bucket)
+            bucket_id+=1
 
         selection_method='hash'  # 指定选择方法为hash
         selection_method_param=0  # 使用默认的哈希参数
@@ -80,7 +88,6 @@ class GroupManager:
         property = OFPGroupPropExperimenter(
             type_=ofproto.OFPGPT_EXPERIMENTER,
             selection_method=selection_method,
-            selection_method_param = selection_method_param,
             fields=fields
         )
 
