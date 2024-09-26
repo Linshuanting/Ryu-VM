@@ -94,6 +94,7 @@ class SimpleSwitch(app_manager.RyuApp):
                 # ofp.OXM_OF_TCP_DST    # TCP 目的端口
         ]
 
+        # 使用方法在 myparser.py 裡面，請去確認
         b = myparser.OFPGroupPropExperimenter(
             type_=ofp.OFPGPT_EXPERIMENTER,
             selection_method=selection_method,

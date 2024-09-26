@@ -27,7 +27,7 @@ from ryu.lib.pack_utils import msg_pack_into
 from ryu import utils
 from ryu.ofproto import oxm_fields
 import struct
-import socket
+
 
 
 OFP_GROUP_PROP_EXPERIMENTER_PACK_STR = '!HHII4x16sQ'

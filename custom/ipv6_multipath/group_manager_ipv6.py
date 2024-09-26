@@ -1,7 +1,7 @@
 import json
 import os
 import logging
-from myparser import OFPGroupPropExperimenter
+import myparser 
 
 class GroupManager:
     def __init__(self, json_file='group.json', logger=None):
@@ -83,12 +83,11 @@ class GroupManager:
 
         selection_method='hash'  # 指定选择方法为hash
         selection_method_param=0  # 使用默认的哈希参数
-        fields=[ofproto.OXM_OF_IPV6_FLABEL]  # 使用IPv6 Flow Label作为哈希字段
 
-        property = OFPGroupPropExperimenter(
+        property = myparser.OFPGroupPropExperimenter(
             type_=ofproto.OFPGPT_EXPERIMENTER,
             selection_method=selection_method,
-            fields=fields
+            ipv6_flabel=myparser.OFP_GROUP_PROP_FIELD_MATCH_ALL_IPV6_FLABEL
         )
 
         properties = [property]
