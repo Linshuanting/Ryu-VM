@@ -174,6 +174,7 @@ class Host(object):
         d = {'mac': self.mac,
              'ipv4': self.ipv4,
              'ipv6': self.ipv6,
+             
              'port': self.port.to_dict()}
         return d
 

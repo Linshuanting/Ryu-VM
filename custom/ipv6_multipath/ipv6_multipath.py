@@ -134,7 +134,7 @@ class ICMPv6RyuController(app_manager.RyuApp):
 
         # 忽略 DAD NS Message 
         if src == "::":
-            # self.logger.info("Ignoring DAD NS message with unspecified source address.")
+            self.logger.info("Ignoring DAD NS message with unspecified source address.")
             return
 
         if self.detect_duplicated(datapath.id, msg):
