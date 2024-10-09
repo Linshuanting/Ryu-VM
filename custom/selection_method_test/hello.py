@@ -88,8 +88,8 @@ class SimpleSwitch(app_manager.RyuApp):
             type_=ofp.OFPGPT_EXPERIMENTER,
             selection_method=selection_method,
             selection_method_param = selection_method_param,
-            ipv6_flabel=myparser.OFP_GROUP_PROP_FIELD_MATCH_ALL_IPV6_FLABEL,
-            ipv6_src=myparser.OFP_GROUP_PROP_FIELD_MATCH_ALL_IPV6_SRC
+            ipv6_flabel=myparser.OFP_GROUP_PROP_FIELD_MATCH_ALL_IPV6_FLABEL
+            # ipv6_src=myparser.OFP_GROUP_PROP_FIELD_MATCH_ALL_IPV6_SRC
             )
         
         properties = [b]

@@ -11,6 +11,7 @@ from ryu.lib.packet import ipv6, icmpv6
 from ryu.lib import hub
 from collections import defaultdict as ddict
 from ryu.exception import RyuException
+from sortedcontainers import SortedList
 
 
 from ryu.topology import event
@@ -21,6 +22,7 @@ from ryu.lib.dpid import dpid_to_str, str_to_dpid
 
 class SimpleSwitch15(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_5.OFP_VERSION]
+    
 
     def __init__(self, *args, **kwargs):
         super(SimpleSwitch15, self).__init__(*args, **kwargs)
@@ -120,68 +122,108 @@ class SimpleSwitch15(app_manager.RyuApp):
         msg=ev.msg
         dp=msg.datapath
         body=ev.msg.body
+
+        # print(f"body: {body}")
         
         for p in body:
             if p.port_no != ofproto_v1_5.OFPP_CONTROLLER and p.port_no != ofproto_v1_5.OFPP_LOCAL:
                 self.topo.set_port_in_switch(dp.id, p.port_no)
                 self.topo.set_switch_port_mac(p.hw_addr, p.port_no, dp.id)
                 self.send_lldp_out(dp, p.port_no)
+                
     
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
-    def _ndp_packet_in_handler(self, ev):
-
+    def _icmpv6_packet_in_handler(self, ev):
         msg = ev.msg
         dp=msg.datapath
         in_port=msg.match['in_port']
 
         try:
-            data = NDPPacket.ndp_parse(msg)
-        except NDPPacket.NDPUnknownFormat as e:
+            data = Icmpv6Packet.icmpv6_parse(msg)
+        except Icmpv6Packet.Icmpv6UnknownFormat as e:
             # self.logger.warning(f"Unknown NDP packet format: {e}")
             return
         
-        if data is None:
-            return
         # 判斷這個封包是否是 DAD 封包，是才繼續做
-        if 'src_ip' in data and data['src_ip'] == "::":
+        if data['src_ip'] == "::" and data['icmpv6_type'] == icmpv6.ND_NEIGHBOR_SOLICIT:
             self.handle_ndp_dad(dp, in_port, data)
             return
-
-        if 'ndp_type' in data and data['ndp_type'] == icmpv6.ND_NEIGHBOR_SOLICIT:
+        # NS
+        if data['icmpv6_type'] == icmpv6.ND_NEIGHBOR_SOLICIT:
             self.handle_ndp_ns(dp, in_port, data)
             return
+        # RS
+        if data['icmpv6_type'] == icmpv6.ND_ROUTER_SOLICIT:
+            self.handle_ndp_rs(dp, in_port, data)
+            return
+        # MLD
+        if data['icmpv6_type'] == icmpv6.MLDV2_LISTENER_REPORT:
+            print("--- This is MLDv2 report ---")
+            print(data)
+            self.handle_mld_report(dp, in_port, data)
+            return
         
+    def send_icmpv6_request(self, datapath, port, switch_port_mac, switch_port_ip):
+        data = Icmpv6Packet.icmpv6_request_packet(switch_port_mac, switch_port_ip)
+        self.send_pkt_msg(datapath, port, data)
 
     def handle_ndp_dad(self, dp, in_port, data):
         
         if (self.topo.is_switch_mac(data['src_mac'])):
             return
-        
-        if (self.topo.is_ip_is_used(data['target_ip'])):
+
+        if (self.topo.is_ip_is_used(data['target_ip']) 
+            and data['target_ip'].startswith('ff') is False):
             # reply dad msg
             return
-        
+            
         self.topo.set_host(data['src_mac'], data['target_ip'], dp.id, in_port)
-        print(f"------ This is NDP DAD Function -------")
         self.topo.get_hosts()
 
     def handle_ndp_ns(self, dp, in_port, data):
 
+        if (self.topo.is_host(data['src_mac']) is False):
+            return
+        
         self.topo.set_host(data['src_mac'], data['src_ip'], dp.id, in_port)
-        self.send_ndp_out(dp, in_port, data)
+        self.send_ndp_na_out(dp, in_port, data)
 
         self.topo.get_hosts()
 
-    def send_ndp_out(self, datapath, port, data):
-        # TODO 
-        # 更改 mac, ip, 以及 target ip
-        pkt = NDPPacket.ndp_packet(icmpv6.ND_NEIGHBOR_ADVERT, 
-                                   data['src_mac'], 
-                                   data['src_ip'], 
-                                   data['target_ip'])
+    def send_ndp_na_out(self, datapath, port, data):
         
+        src_mac = self.topo.get_mac_from_ip(data['target_ip'])
+        if src_mac is None:
+            print(f"target mac {data['target_ip']} is not find")
+            return
+
+        # 發送 NDP (NA) 封包
+        pkt = NDPPacket.ndp_packet(icmpv6.ND_NEIGHBOR_ADVERT, 
+                                   src_mac,
+                                   data['src_mac'],
+                                   data['target_ip'], 
+                                   data['src_ip'])
+        # print(f"pkt: {pkt}")
         self.send_pkt_msg(datapath, port, pkt.data)
 
+    def handle_ndp_rs(self, dp, in_port, data):
+        
+        if (self.topo.is_host(data['src_mac']) is False):
+            return
+        
+        self.topo.set_host(data['src_mac'], data['src_ip'], dp.id, in_port)
+        self.topo.get_hosts()
+
+    def handle_mld_report(self, dp, in_port, data):
+
+        if (self.topo.is_host(data['src_mac']) is False):
+            return
+        if (data['src_ip'] == '::'):
+            print(f"data: {data}")
+            return
+        
+        self.topo.set_host(data['src_mac'], data['src_ip'], dp.id, in_port)
+        self.topo.get_hosts()
 
 class Topology(dict):
 
@@ -206,11 +248,11 @@ class Topology(dict):
         if host_mac in self.hosts:
             # 檢查 IP 是否已經在列表中，如果沒有，則添加
             if host_ip not in self.hosts[host_mac]['ips']:
-                self.hosts[host_mac]['ips'].append(host_ip)
+                self.hosts[host_mac]['ips'].add(host_ip)
         else:
             # 如果該 MAC 地址不存在，則創建新的條目
             self.hosts[host_mac] = {
-                'ips': [host_ip],  # 使用列表來存儲多個 IP
+                'ips': SortedList([host_ip]),  # 使用列表來存儲多個 IP
                 'sw_id': sw_id,
                 'sw_in_port': sw_in_port
             }
@@ -221,15 +263,28 @@ class Topology(dict):
         return None
     
     def get_hosts(self):
+        print("------ Get all hosts -------")
         for host_mac, host_info in self.hosts.items():  # host_info 是元組
             print(f"host mac: {host_mac}, host ips: {host_info['ips']}, switch id: {host_info['sw_id']}, switch port: {host_info['sw_in_port']}")
 
+    def is_host(self, mac):
+        if mac in self.hosts:
+            return True
+        return False
+    
     def is_ip_is_used(self, ip):
         for host_mac, host_info in self.hosts.items():
             for host_ip in host_info['ips']:
                 if ip == host_ip:
                     return True
         return False
+    
+    def get_mac_from_ip(self, ip):
+        for host_mac, host_info in self.hosts.items():
+            for host_ip in host_info['ips']:
+                if ip == host_ip:
+                    return host_mac
+        return None
     
     def get_ports_in_switch(self, dp):
         if dp in self.switchports:
@@ -278,6 +333,86 @@ class Topology(dict):
                 print(f"src port:{src_port}, dst port:{dst_port}")
         return all_links
 
+class Icmpv6Packet(object):
+
+    class Icmpv6UnknownFormat(RyuException):
+        message = '%(msg)s'
+
+    @staticmethod
+    def icmpv6_parse(msg):
+
+        pkt = packet.Packet(msg.data)
+        eth = pkt.get_protocol(ethernet.ethernet)
+
+        ip6 = pkt.get_protocol(ipv6.ipv6)
+        icmpv6_pkt = pkt.get_protocol(icmpv6.icmpv6)
+
+        if icmpv6_pkt is None:
+            raise Icmpv6Packet.Icmpv6UnknownFormat()
+        
+        src_mac = eth.src
+        src_ip = ip6.src
+        dst_ip = ip6.dst
+
+        if icmpv6_pkt.type_ == icmpv6.ICMPV6_ECHO_REPLY:
+            return {
+                'src_mac': src_mac,
+                'src_ip': src_ip,
+                'dst_ip': dst_ip,
+                'icmpv6_type': icmpv6.ICMPV6_ECHO_REPLY,
+            }
+        
+         # 檢查是否是 Neighbor Solicitation (NS) 或 Neighbor Advertisement (NA)
+        if icmpv6_pkt.type_ == icmpv6.ND_NEIGHBOR_SOLICIT or icmpv6_pkt.type_ == icmpv6.ND_NEIGHBOR_ADVERT:
+            ndp_type = icmpv6_pkt.type_  # 獲取 NDP 消息類型（NS 或 NA）
+            target_ip = icmpv6_pkt.data.dst  # 鄰居廣告/請求的目標地址
+            # 回傳解析的結果
+            return {
+                'src_mac': src_mac,
+                'src_ip': src_ip,
+                'dst_ip': dst_ip,
+                'icmpv6_type': ndp_type,
+                'target_ip': target_ip,
+            }
+        
+        if icmpv6_pkt.type_==icmpv6.ND_ROUTER_SOLICIT or icmpv6_pkt.type_ == icmpv6.ND_ROUTER_ADVERT:
+            ndp_type = icmpv6_pkt.type_
+            return {
+                'src_mac': src_mac,
+                'src_ip': src_ip,
+                'dst_ip': dst_ip,
+                'icmpv6_type': ndp_type,
+            }
+        
+        # RS, RA
+        # MLDv2
+        return {
+                'src_mac': src_mac,
+                'src_ip': src_ip,
+                'dst_ip': dst_ip,
+                'icmpv6_type': icmpv6_pkt.type_,
+            }
+
+    @staticmethod
+    def icmpv6_request_packet(src_mac, src_ip):
+        # 創建 Ethernet 頭
+        eth = ethernet.ethernet(dst='33:33:00:00:00:01',
+                                src=src_mac,
+                                ethertype=ether_types.ETH_TYPE_IPV6)
+        # 創建 IPv6 頭，目的地址是所有節點的多播地址
+        ipv6_pkt = ipv6.ipv6(src=src_ip, dst='ff02::1', nxt=inet.IPPROTO_ICMPV6)
+        # 創建 ICMPv6 Echo Request 封包
+        echo_request = icmpv6.icmpv6(type_=icmpv6.ICMPV6_ECHO_REQUEST, code=0)
+
+        # 封裝成完整封包
+        pkt = packet.Packet()
+        pkt.add_protocol(eth)
+        pkt.add_protocol(ipv6_pkt)
+        pkt.add_protocol(echo_request)
+        pkt.serialize()
+
+        return pkt
+
 class NDPPacket(object):
 
     class NDPUnknownFormat(RyuException):
@@ -307,9 +442,6 @@ class NDPPacket(object):
         src_ip = ip6.src
         dst_ip = ip6.dst
 
-        # print(f"src_ip:{src_ip}")
-        # print(f"dst_ip:{dst_ip}")
-
          # 檢查是否是 Neighbor Solicitation (NS) 或 Neighbor Advertisement (NA)
         if icmpv6_pkt.type_ == icmpv6.ND_NEIGHBOR_SOLICIT or icmpv6_pkt.type_ == icmpv6.ND_NEIGHBOR_ADVERT:
             ndp_type = icmpv6_pkt.type_  # 獲取 NDP 消息類型（NS 或 NA）
@@ -323,34 +455,46 @@ class NDPPacket(object):
                 'target_ip': target_ip,
             }
         
+        if icmpv6_pkt.type_==icmpv6.ND_ROUTER_SOLICIT or icmpv6_pkt.type_ == icmpv6.ND_ROUTER_ADVERT:
+            ndp_type = icmpv6_pkt.type_
+            return {
+                'src_mac': src_mac,
+                'src_ip': src_ip,
+                'dst_ip': dst_ip,
+                'ndp_type': ndp_type,
+            }
+        
         return None
     
     @staticmethod
-    def ndp_packet(type, src_mac, src_ip, target_ip):
-        # 創建 Ethernet 頭
-        eth = ethernet.ethernet(dst='33:33:ff:00:00:00',
+    def ndp_packet(type, src_mac, dst_mac, src_ip, dst_ip):
+
+        if type == icmpv6.ND_NEIGHBOR_SOLICIT:
+            eth = ethernet.ethernet(dst='33:33:ff:00:00:00',
                                 src=src_mac,
                                 ethertype=ether_types.ETH_TYPE_IPV6)
 
-        if type == icmpv6.ND_NEIGHBOR_SOLICIT:
             ipv6_pkt = ipv6.ipv6(src=src_ip,
-                                dst='ff02::1:ff' + target_ip[-6:],  # 多播地址
+                                dst='ff02::1:ff' + dst_ip[-6:],  # 多播地址
                                 nxt=inet.IPPROTO_ICMPV6)
             
             # 創建 ICMPv6 Neighbor Solicitation 封包
             ndp_pkt = icmpv6.nd_neighbor(res=0,
-                                        dst=target_ip)
+                                        dst=dst_ip)
             icmpv6_pkt = icmpv6.icmpv6(
                 type_=icmpv6.ND_NEIGHBOR_SOLICIT, 
                 data=ndp_pkt)
             
         elif type == icmpv6.ND_NEIGHBOR_ADVERT:
+            eth = ethernet.ethernet(dst=dst_mac,
+                                src=src_mac,
+                                ethertype=ether_types.ETH_TYPE_IPV6)
             ipv6_pkt = ipv6.ipv6(src=src_ip,
-                                dst=target_ip,
+                                dst=dst_ip,
                                 nxt=inet.IPPROTO_ICMPV6)
             ndp_pkt = icmpv6.nd_neighbor(
                 res=6, 
-                dst=target_ip,
+                dst=src_ip,
                 option=icmpv6.nd_option_tla(hw_src=src_mac))
             icmpv6_pkt = icmpv6.icmpv6(
                 type_=icmpv6.ND_NEIGHBOR_ADVERT, 
