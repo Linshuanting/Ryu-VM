@@ -29,7 +29,7 @@ trap cleanup EXIT  # 在腳本結束時執行
 trap cleanup SIGTSTP  # 在收到 Ctrl+Z (SIGTSTP) 時執行
 
 # 延遲以確保 Ryu Controller 完全啟動
-sleep 2
+sleep 1
 
 # 啟動 Mininet，並等待該窗口的進程結束
 echo "Starting Mininet with topology script $MININET_TOPOLOGY_PATH..."
