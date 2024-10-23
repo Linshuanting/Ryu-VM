@@ -1,0 +1,96 @@
+{
+    "topologies": [
+      {
+        "name": "Mesh Topology",
+        "nodes": ["h1", "h2", "h3", "h4", "h5", "h6"],
+        "links": [
+          ["h1", "h2"], ["h1", "h3"],
+          ["h2", "h3"], ["h2", "h4"],
+          ["h3", "h4"], ["h3", "h5"],
+          ["h4", "h5"], ["h4", "h6"],
+          ["h5", "h6"]
+        ],
+        "demands": [
+          {
+            "source": "h1",
+            "destinations": ["h4", "h5"],
+            "demand": 15
+          },
+          {
+            "source": "h3",
+            "destinations": ["h6"],
+            "demand": 10
+          }
+        ]
+      },
+      {
+        "name": "Star Topology",
+        "nodes": ["h1", "h2", "h3", "h4", "h5", "h6"],
+        "links": [
+          ["h1", "h2"], ["h1", "h3"], ["h1", "h4"],
+          ["h1", "h5"], ["h1", "h6"]
+        ],
+        "demands": [
+          {
+            "source": "h1",
+            "destinations": ["h2", "h3", "h4", "h5", "h6"],
+            "demand": 25
+          }
+        ]
+      },
+      {
+        "name": "Tree Topology",
+        "nodes": ["h1", "h2", "h3", "h4", "h5", "h6", "h7"],
+        "links": [
+          ["h1", "h2"], ["h1", "h3"],
+          ["h2", "h4"], ["h2", "h5"],
+          ["h3", "h6"], ["h3", "h7"]
+        ],
+        "demands": [
+          {
+            "source": "h1",
+            "destinations": ["h4", "h5", "h6", "h7"],
+            "demand": 20
+          }
+        ]
+      }
+    ],
+    "additional_demands": [
+      {
+        "name": "Test Demand 1",
+        "demands": [
+          {
+            "source": "h1",
+            "destinations": ["h4", "h5"],
+            "demand": 20
+          },
+          {
+            "source": "h2",
+            "destinations": ["h6", "h7"],
+            "demand": 10
+          },
+          {
+            "source": "h3",
+            "destinations": ["h4", "h6"],
+            "demand": 15
+          }
+        ]
+      },
+      {
+        "name": "Test Demand 2",
+        "demands": [
+          {
+            "source": "h1",
+            "destinations": ["h4", "h6"],
+            "demand": 10
+          },
+          {
+            "source": "h2",
+            "destinations": ["h5", "h7"],
+            "demand": 15
+          }
+        ]
+      }
+    ]
+  }
+  

@@ -1,4 +1,5 @@
 from pulp import LpProblem, LpVariable, lpSum, LpMaximize, value
+import json
 
 class MCFPOptimizer:
     def __init__(self, nodes, links, demands):
@@ -68,10 +69,24 @@ class MCFPOptimizer:
 
 # 示例使用
 if __name__ == "__main__":
+    
+    with open('custom/topology_learn/test_topo.json', 'r') as file:
+        data = json.load(file)
+    
     # 假設的拓撲信息
-    nodes = ["h1", "h2", "h3", "h4", "h5"]
-    links = [("h1", "h2"), ("h1", "h3"), ("h4", "h5")]
-    demands = [("h1", ["h2", "h3"], 10), ("h4", ["h5"], 5)]  # 假設的需求
+    topo = data['topologies'][0]
+    add_demands = data['additional_demands'][0]
+
+    print(f"Topology: {topo['name']}")
+    nodes = topo['nodes']
+    
+    links = [(link[0], link[1]) for link in topo['links']]
+    demands = [(demand['source'], demand['destinations'], demand['demand']) for demand in topo['demands']]
+
+    print(nodes)
+    print(links)
+    print(demands)
+    print("----- starts -----")
 
     # 創建並運行優化器
     optimizer = MCFPOptimizer(nodes, links, demands)
