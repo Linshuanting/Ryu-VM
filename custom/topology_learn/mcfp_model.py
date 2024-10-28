@@ -13,6 +13,7 @@ class MCFPOptimizer:
         self.links = links
         self.demands = demands
         self.model = None
+        self.solution = {}
 
     def create_mcfp_model(self):
         """創建 MCFP 的 MILP 模型"""
@@ -33,7 +34,7 @@ class MCFPOptimizer:
         # 流量守恒約束
         for k, (s_k, T_k, d_k) in enumerate(self.demands):
             # 來源節點的流量守恒
-            prob += lpSum([f[(s_k, v, k)] for v in self.nodes if (s_k, v) in self.links]) >= d_k , f"Flow conservation at source {s_k} for commodity {k}"
+            prob += lpSum([f[(s_k, v, k)] for v in self.nodes if (s_k, v) in self.links]) >= d_k * Z , f"Flow conservation at source {s_k} for commodity {k}"
             
             # 目的地節點的流量守恒，並且計算接收百分比
             for t in T_k:
@@ -43,12 +44,25 @@ class MCFPOptimizer:
             # 中間節點的流量守恒
             for v in self.nodes:
                 if v != s_k and v not in T_k:
-                    prob += (lpSum([f[(u, v, k)] for u in self.nodes if (u, v) in self.links]) ==
+                    # 對每個中間節點 v，進入的流量 <= 傳出的流量總和 (確保 multicast)
+                    prob += (lpSum([f[(u, v, k)] for u in self.nodes if (u, v) in self.links]) <=
                              lpSum([f[(v, w, k)] for w in self.nodes if (v, w) in self.links])), f"Flow conservation at node {v} for commodity {k}"
 
+                    # 對每個中間節點 v，每個 commodity 進入的流量 >= 對每個邊傳出的流量
+                    for u in self.nodes:
+                        for w in self.nodes:
+                            if (u, v) in self.links and (v, w) in self.links and u < v:
+                                prob += f[(u, v, k)] >= f[(v, w, k)], f"Flow constraint at node {v} for commodity {k} from {v} to {w}"
+        
+        # # 邊容量約束
+        # for (i, j) in self.links:
+        #     prob += lpSum([f[(i, j, k)] for k in range(len(self.demands))]) <= 10  # 假設容量為 10
+
         # 邊容量約束
-        for (i, j) in self.links:
-            prob += lpSum([f[(i, j, k)] for k in range(len(self.demands))]) <= 10  # 假設容量為 10
+        for (u, v) in self.links:
+            if u < v: # 避免重複約束，因為 links 裡面已經存了雙向邊了
+                # 假設容量為 10，可以根據 link capacity 做更改
+                prob += lpSum([f[(u, v, k)] + f[(v, u, k)] for k in range(len(self.demands))]) <= 10, f"Capacity constraint for link {u}<-> {v}"
 
         self.model = prob
         return prob
@@ -64,8 +78,18 @@ class MCFPOptimizer:
         solution = {}
         for v in self.model.variables():
             solution[v.name] = value(v)
+
+        self.solution = solution
         
         return solution
+    
+    def get_solve(self):
+
+        print("------ Solution -------")
+        for k, v in self.solution.items():
+            if v != 0.0:
+                print(f"{k}: {v}")
+
 
 # 示例使用
 if __name__ == "__main__":
@@ -74,7 +98,7 @@ if __name__ == "__main__":
         data = json.load(file)
     
     # 假設的拓撲信息
-    topo = data['topologies'][0]
+    topo = data['topologies'][2]
     add_demands = data['additional_demands'][0]
 
     print(f"Topology: {topo['name']}")
@@ -93,4 +117,12 @@ if __name__ == "__main__":
     optimizer.create_mcfp_model()
     solution = optimizer.solve()
 
-    print("Solution:", solution)
+    
+    # print("Solution:", solution)
+
+    print("------ Solution -------")
+    for k, v in solution.items():
+        if v != 0.0:
+            print(f"{k}: {v}")
+
+
