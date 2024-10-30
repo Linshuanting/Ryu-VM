@@ -48,21 +48,38 @@ class MCFPOptimizer:
                     prob += (lpSum([f[(u, v, k)] for u in self.nodes if (u, v) in self.links]) <=
                              lpSum([f[(v, w, k)] for w in self.nodes if (v, w) in self.links])), f"Flow conservation at node {v} for commodity {k}"
 
-                    # 對每個中間節點 v，每個 commodity 進入的流量 >= 對每個邊傳出的流量
-                    for u in self.nodes:
-                        for w in self.nodes:
-                            if (u, v) in self.links and (v, w) in self.links and u < v:
-                                prob += f[(u, v, k)] >= f[(v, w, k)], f"Flow constraint at node {v} for commodity {k} from {v} to {w}"
-        
-        # # 邊容量約束
-        # for (i, j) in self.links:
-        #     prob += lpSum([f[(i, j, k)] for k in range(len(self.demands))]) <= 10  # 假設容量為 10
+                     # 找到進入和傳出該節點的邊
+                    input_links = [(u, v) for u in self.nodes if (u, v) in self.links]  # 進入邊
+                    output_links = [(v, w) for w in self.nodes if (v, w) in self.links]  # 傳出邊
 
-        # 邊容量約束
+                    # 如果該節點有進入邊且有傳出邊
+                    if input_links and output_links:
+                        # 計算進入邊的總流量
+                        total_input_flow = lpSum([f[(u, v, k)] for (u, v) in input_links])
+
+                        # 對於每條傳出邊，設置流量不超過進入邊的總流量
+                        for (v, w) in output_links:
+                            prob += f[(v, w, k)] <= total_input_flow, f"Multicast constraint at node {v} for commodity {k} to {w}"
+                            
+                
+                if v == s_k:
+                    prob += lpSum([f[(u, v, k)] for u in self.nodes if (u, v) in self.links]) == 0, f"Start node {v} in commodity {k} inflow is Zero "
+            
+            
+
+        # 邊容量約束，同時處理單向和雙向情況
         for (u, v) in self.links:
-            if u < v: # 避免重複約束，因為 links 裡面已經存了雙向邊了
-                # 假設容量為 10，可以根據 link capacity 做更改
-                prob += lpSum([f[(u, v, k)] + f[(v, u, k)] for k in range(len(self.demands))]) <= 10, f"Capacity constraint for link {u}<-> {v}"
+            if (v, u) in self.links:  # 雙向邊
+                if u < v:  # 確保每對邊只處理一次
+                    if (u.startswith('c') or v.startswith('c') ):
+                        prob += lpSum([f[(u, v, k)] + f[(v, u, k)] for k in range(len(self.demands))]) <= 50, f"Capacity constraint for biidirectional link {u}->{v}"
+                    else:
+                        prob += lpSum([f[(u, v, k)] + f[(v, u, k)] for k in range(len(self.demands))]) <= 10, f"Capacity constraint for bidirectional link {u}<->{v}"
+            else:  # 單向邊
+                if (u.startswith('c') or v.startswith('c') ):
+                    prob += lpSum([f[(u, v, k)] for k in range(len(self.demands))]) <= 50, f"Capacity constraint for unidirectional link {u}->{v}"
+                else:
+                    prob += lpSum([f[(u, v, k)] for k in range(len(self.demands))]) <= 10, f"Capacity constraint for unidirectional link {u}->{v}"
 
         self.model = prob
         return prob
@@ -87,7 +104,7 @@ class MCFPOptimizer:
 
         print("------ Solution -------")
         for k, v in self.solution.items():
-            if v != 0.0:
+            if v != 0.0 or k is 'Z':
                 print(f"{k}: {v}")
 
 
@@ -98,7 +115,7 @@ if __name__ == "__main__":
         data = json.load(file)
     
     # 假設的拓撲信息
-    topo = data['topologies'][2]
+    topo = data['topologies'][0]
     add_demands = data['additional_demands'][0]
 
     print(f"Topology: {topo['name']}")
@@ -118,11 +135,11 @@ if __name__ == "__main__":
     solution = optimizer.solve()
 
     
-    # print("Solution:", solution)
+    print("Solution:", solution)
 
     print("------ Solution -------")
     for k, v in solution.items():
-        if v != 0.0:
+        if v != 0.0 or k is 'Z':
             print(f"{k}: {v}")
 
 

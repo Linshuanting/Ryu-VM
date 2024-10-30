@@ -2,24 +2,26 @@
     "topologies": [
       {
         "name": "Mesh Topology",
-        "nodes": ["h1", "h2", "h3", "h4", "h5", "h6"],
+        "nodes": ["h1", "h2", "h3", "h4", "h5", "h6", "c1", "c2", "c4", "c5", "c6"],
         "links": [
           ["h1", "h2"], ["h1", "h3"],
           ["h2", "h3"], ["h2", "h4"],
           ["h3", "h4"], ["h3", "h5"],
           ["h4", "h5"], ["h4", "h6"],
-          ["h5", "h6"]
+          ["h5", "h6"], ["c1", "h1"],
+          ["c2", "h2"], ["h4", "c4"], 
+          ["h6", "c6"], ["h5", "c5"]
         ],
         "demands": [
           {
-            "source": "h1",
-            "destinations": ["h4", "h5"],
+            "source": "c1",
+            "destinations": ["c4", "c5"],
             "demand": 15
           },
           {
-            "source": "h3",
-            "destinations": ["h6"],
-            "demand": 10
+            "source": "c2",
+            "destinations": ["c6"],
+            "demand": 20
           }
         ]
       },
@@ -28,7 +30,9 @@
         "nodes": ["h1", "h2", "h3", "h4", "h5", "h6"],
         "links": [
           ["h1", "h2"], ["h1", "h3"], ["h1", "h4"],
-          ["h1", "h5"], ["h1", "h6"]
+          ["h1", "h5"], ["h1", "h6"], ["h2", "h1"],
+          ["h3", "h1"], ["h4", "h1"], ["h5", "h1"],
+          ["h6", "h1"]
         ],
         "demands": [
           {
@@ -51,6 +55,26 @@
             "source": "h1",
             "destinations": ["h4", "h5", "h6", "h7"],
             "demand": 20
+          }
+        ]
+      },
+      {
+        "name": "Mesh Topology",
+        "nodes": ["h1", "h2", "h3", "h4", "c1", "c2", "c3", "c4"],
+        "links": [
+          ["h1", "h2"], ["h1", "h3"],
+          ["h1", "h4"], ["h2", "h4"],
+          ["h3", "h4"], ["h2", "h1"],
+          ["h3", "h1"], ["h4", "h1"],
+          ["h4", "h2"], ["h4", "h3"],
+          ["c1", "h1"], ["h4", "c4"], 
+          ["h2", "c2"], ["h3", "c3"]
+        ],
+        "demands": [
+          {
+            "source": "c1",
+            "destinations": ["c2", "c4"],
+            "demand": 15
           }
         ]
       }
