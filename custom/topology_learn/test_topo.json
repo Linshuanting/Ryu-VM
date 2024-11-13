@@ -4,13 +4,20 @@
         "name": "Mesh Topology",
         "nodes": ["h1", "h2", "h3", "h4", "h5", "h6", "c1", "c2", "c4", "c5", "c6"],
         "links": [
-          ["h1", "h2"], ["h1", "h3"],
-          ["h2", "h3"], ["h2", "h4"],
-          ["h3", "h4"], ["h3", "h5"],
-          ["h4", "h5"], ["h4", "h6"],
-          ["h5", "h6"], ["c1", "h1"],
-          ["c2", "h2"], ["h4", "c4"], 
-          ["h6", "c6"], ["h5", "c5"]
+            ["h1", "h2"], ["h2", "h1"],
+            ["h1", "h3"], ["h3", "h1"],
+            ["h2", "h3"], ["h3", "h2"],
+            ["h2", "h4"], ["h4", "h2"],
+            ["h3", "h4"], ["h4", "h3"],
+            ["h3", "h5"], ["h5", "h3"],
+            ["h4", "h5"], ["h5", "h4"],
+            ["h4", "h6"], ["h6", "h4"],
+            ["h5", "h6"], ["h6", "h5"],
+            ["c1", "h1"], ["h1", "c1"],
+            ["c2", "h2"], ["h2", "c2"],
+            ["h4", "c4"], ["c4", "h4"],
+            ["h6", "c6"], ["c6", "h6"],
+            ["h5", "c5"], ["c5", "h5"]
         ],
         "demands": [
           {
@@ -20,100 +27,96 @@
           },
           {
             "source": "c2",
-            "destinations": ["c6"],
+            "destinations": ["c5", "c6"],
             "demand": 20
           }
-        ]
+        ],
+        "capacities": {
+            "h1-h2": 10, "h2-h1": 10,
+            "h1-h3": 10, "h3-h1": 10,
+            "h2-h3": 10, "h3-h2": 10,
+            "h2-h4": 10, "h4-h2": 10,
+            "h3-h4": 10, "h4-h3": 10,
+            "h3-h5": 10, "h5-h3": 10,
+            "h4-h5": 10, "h5-h4": 10,
+            "h4-h6": 10, "h6-h4": 10,
+            "h5-h6": 10, "h6-h5": 10,
+            "c1-h1": 50, "h1-c1": 50,
+            "c2-h2": 50, "h2-c2": 50,
+            "h4-c4": 50, "c4-h4": 50,
+            "h6-c6": 50, "c6-h6": 50,
+            "h5-c5": 50, "c5-h5": 50
+        }
+      },
+      {
+        "name": "Spine-Leaf Topology",
+        "nodes": ["spine1", "spine2", "leaf1", "leaf2", "leaf3", "leaf4", "h1", "h2", "h3", "h4"],
+        "links": [
+          ["spine1", "leaf1"], ["leaf1", "spine1"],
+          ["spine1", "leaf2"], ["leaf2", "spine1"],
+          ["spine1", "leaf3"], ["leaf3", "spine1"],
+          ["spine1", "leaf4"], ["leaf4", "spine1"],
+          ["spine2", "leaf1"], ["leaf1", "spine2"],
+          ["spine2", "leaf2"], ["leaf2", "spine2"],
+          ["spine2", "leaf3"], ["leaf3", "spine2"],
+          ["spine2", "leaf4"], ["leaf4", "spine2"],
+          ["leaf1", "h1"], ["h1", "leaf1"],
+          ["leaf1", "h2"], ["h2", "leaf1"],
+          ["leaf2", "h3"], ["h3", "leaf2"],
+          ["leaf2", "h4"], ["h4", "leaf2"]
+        ],
+        "demands": [
+          {
+            "source": "h1",
+            "destinations": ["h3", "h4"],
+            "demand": 90
+          },
+          {
+            "source": "h2",
+            "destinations": ["h3", "h4"],
+            "demand": 130
+          }
+        ],
+        "capacities": {
+          "spine1-leaf1": 50, "leaf1-spine1": 50,
+          "spine1-leaf2": 50, "leaf2-spine1": 50,
+          "spine1-leaf3": 50, "leaf3-spine1": 50,
+          "spine1-leaf4": 50, "leaf4-spine1": 50,
+          "spine2-leaf1": 50, "leaf1-spine2": 50,
+          "spine2-leaf2": 50, "leaf2-spine2": 50,
+          "spine2-leaf3": 50, "leaf3-spine2": 50,
+          "spine2-leaf4": 50, "leaf4-spine2": 50,
+          "leaf1-h1": 150, "h1-leaf1": 150,
+          "leaf1-h2": 150, "h2-leaf1": 150,
+          "leaf2-h3": 150, "h3-leaf2": 150,
+          "leaf2-h4": 150, "h4-leaf2": 150
+        }
       },
       {
         "name": "Star Topology",
-        "nodes": ["h1", "h2", "h3", "h4", "h5", "h6"],
+        "nodes": ["center", "node1", "node2", "node3", "node4"],
         "links": [
-          ["h1", "h2"], ["h1", "h3"], ["h1", "h4"],
-          ["h1", "h5"], ["h1", "h6"], ["h2", "h1"],
-          ["h3", "h1"], ["h4", "h1"], ["h5", "h1"],
-          ["h6", "h1"]
+          ["center", "node1"], ["center", "node2"], ["center", "node3"], ["center", "node4"],
+          ["node1", "center"], ["node2", "center"], ["node3", "center"], ["node4", "center"]
         ],
         "demands": [
           {
-            "source": "h1",
-            "destinations": ["h2", "h3", "h4", "h5", "h6"],
-            "demand": 25
-          }
-        ]
-      },
-      {
-        "name": "Tree Topology",
-        "nodes": ["h1", "h2", "h3", "h4", "h5", "h6", "h7"],
-        "links": [
-          ["h1", "h2"], ["h1", "h3"],["h2", "h1"], ["h3", "h1"],
-          ["h2", "h4"], ["h2", "h5"],["h4", "h2"], ["h5", "h2"],
-          ["h3", "h6"], ["h3", "h7"], ["h6", "h3"], ["h7", "h3"]
-        ],
-        "demands": [
-          {
-            "source": "h1",
-            "destinations": ["h4", "h5", "h6", "h7"],
-            "demand": 20
-          }
-        ]
-      },
-      {
-        "name": "Mesh Topology",
-        "nodes": ["h1", "h2", "h3", "h4", "c1", "c2", "c3", "c4"],
-        "links": [
-          ["h1", "h2"], ["h1", "h3"],
-          ["h1", "h4"], ["h2", "h4"],
-          ["h3", "h4"], ["h2", "h1"],
-          ["h3", "h1"], ["h4", "h1"],
-          ["h4", "h2"], ["h4", "h3"],
-          ["c1", "h1"], ["h4", "c4"], 
-          ["h2", "c2"], ["h3", "c3"]
-        ],
-        "demands": [
-          {
-            "source": "c1",
-            "destinations": ["c2", "c4"],
-            "demand": 15
-          }
-        ]
-      }
-    ],
-    "additional_demands": [
-      {
-        "name": "Test Demand 1",
-        "demands": [
-          {
-            "source": "h1",
-            "destinations": ["h4", "h5"],
+            "source": "node1",
+            "destinations": ["node2", "node3"],
             "demand": 20
           },
           {
-            "source": "h2",
-            "destinations": ["h6", "h7"],
-            "demand": 10
-          },
-          {
-            "source": "h3",
-            "destinations": ["h4", "h6"],
+            "source": "node4",
+            "destinations": ["node2"],
             "demand": 15
           }
-        ]
-      },
-      {
-        "name": "Test Demand 2",
-        "demands": [
-          {
-            "source": "h1",
-            "destinations": ["h4", "h6"],
-            "demand": 10
-          },
-          {
-            "source": "h2",
-            "destinations": ["h5", "h7"],
-            "demand": 15
-          }
-        ]
+        ],
+        "capacities": {
+          "center-node1": 20, "node1-center": 20,
+          "center-node2": 20, "node2-center": 20,
+          "center-node3": 20, "node3-center": 20,
+          "center-node4": 20, "node4-center": 20
+        }
       }
     ]
   }

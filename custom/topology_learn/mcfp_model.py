@@ -1,5 +1,6 @@
-from pulp import LpProblem, LpVariable, lpSum, LpMaximize, value
+from pulp import LpProblem, LpVariable, LpBinary, lpSum, LpMaximize, value
 import json
+import re
 
 class MCFPOptimizer:
     def __init__(self, nodes, links, demands):
@@ -21,12 +22,19 @@ class MCFPOptimizer:
         
         # 定義變量
         f = {}  # 流量變量
+        y = {}  # 用於控制模式的二元變量, 1: 複製模式，0: 分流模式 
         Z = LpVariable("Z", lowBound=0)  # 最小注入流量百分比
+        M = 1000
 
         # 為每條邊和每個商品定義流量變量
         for (i, j) in self.links:
             for k in range(len(self.demands)):  # demands 是商品的需求列表
                 f[(i, j, k)] = LpVariable(f"f_{i}_{j}_{k}", lowBound=0)
+        
+        for v in self.nodes:
+            for k, (s_k, T_k, d_k) in enumerate(self.demands):
+                # 定義二元變量，決定每個節點 v 在商品 k 下的模式
+                y[v, k] = LpVariable(f"y_{v}_{k}", cat=LpBinary)
 
         # 目標函數：最大化 Z
         prob += Z, "Maximize the minimum percentage of receiving flow over demand"
@@ -52,15 +60,28 @@ class MCFPOptimizer:
                     input_links = [(u, v) for u in self.nodes if (u, v) in self.links]  # 進入邊
                     output_links = [(v, w) for w in self.nodes if (v, w) in self.links]  # 傳出邊
 
-                    # 如果該節點有進入邊且有傳出邊
+                    # # 如果該節點有進入邊且有傳出邊
+                    # if input_links and output_links:
+                    #     # 計算進入邊的總流量
+                    #     total_input_flow = lpSum([f[(u, v, k)] for (u, v) in input_links])
+
+                    #     # 對於每條傳出邊，設置流量不超過進入邊的總流量
+                    #     for (v, w) in output_links:
+                    #         prob += f[(v, w, k)] <= total_input_flow, f"Multicast constraint at node {v} for commodity {k} to {w}"
+                    
                     if input_links and output_links:
                         # 計算進入邊的總流量
                         total_input_flow = lpSum([f[(u, v, k)] for (u, v) in input_links])
 
-                        # 對於每條傳出邊，設置流量不超過進入邊的總流量
+                        # # 複製模式約束：確保每個 output link 的流量等於 input flow（當 y[v, k] = 1 時生效）
                         for (v, w) in output_links:
-                            prob += f[(v, w, k)] <= total_input_flow, f"Multicast constraint at node {v} for commodity {k} to {w}"
-                            
+                            prob += f[(v, w, k)] <= total_input_flow + M * (1 - y[v, k]), f"Copy mode upper bound at {v} for commodity {k} to {w}"
+                            prob += f[(v, w, k)] >= total_input_flow - M * (1 - y[v, k]), f"Copy mode lower bound at {v} for commodity {k} to {w}"
+
+                        # 分流模式約束：確保所有 output links 的總流量等於 input flow（當 y[v, k] = 0 時生效）
+                        prob += lpSum([f[(v, w, k)] for (v, w) in output_links]) <= total_input_flow + M * y[v, k], f"Split mode upper bound at {v} for commodity {k}"
+                        prob += lpSum([f[(v, w, k)] for (v, w) in output_links]) >= total_input_flow - M * y[v, k], f"Split mode lower bound at {v} for commodity {k}"
+
                 
                 if v == s_k:
                     prob += lpSum([f[(u, v, k)] for u in self.nodes if (u, v) in self.links]) == 0, f"Start node {v} in commodity {k} inflow is Zero "
@@ -102,8 +123,13 @@ class MCFPOptimizer:
     
     def get_solve(self):
 
+        sorted_solution = sorted(
+            self.solution.items(),
+            key=lambda x: int(re.search(r'_(\d+)$', x[0]).group(1)) if re.search(r'_(\d+)$', x[0]) else 0
+        )
+
         print("------ Solution -------")
-        for k, v in self.solution.items():
+        for k, v in sorted_solution:
             if v != 0.0 or k is 'Z':
                 print(f"{k}: {v}")
 
@@ -115,7 +141,7 @@ if __name__ == "__main__":
         data = json.load(file)
     
     # 假設的拓撲信息
-    topo = data['topologies'][0]
+    topo = data['topologies'][2]
     add_demands = data['additional_demands'][0]
 
     print(f"Topology: {topo['name']}")
@@ -135,11 +161,6 @@ if __name__ == "__main__":
     solution = optimizer.solve()
 
     
-    print("Solution:", solution)
-
-    print("------ Solution -------")
-    for k, v in solution.items():
-        if v != 0.0 or k is 'Z':
-            print(f"{k}: {v}")
+    optimizer.get_solve()
 
 
