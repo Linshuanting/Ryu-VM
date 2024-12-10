@@ -9,8 +9,6 @@ class myAlgorithm:
         self.capacities = capacities
         self.commodities = commodities
 
-    # TODO
-    # 處理 filterE 與 E 的轉換
     def greedy(
             self, 
             V: Set[str], 
@@ -32,28 +30,32 @@ class myAlgorithm:
             lower_bound = k_demand/R1
             filtered_E = {e:E[e] for e in E if E[e] >= lower_bound}
 
-            idx = R1
+            print(f"the name: {k_name}")
+            print(f"phase 1")
 
             while k_demand > 0:
                 
                 tree = self.build_spanning_tree(V, filtered_E, k_src)
+
+                self.print_data(tree)
 
                 if(self.is_connect_tree(tree, k_src, k_dest) is False):
                     print(f"{k_name} build an unconnecting tree")
                     break
 
                 k_demand, path = self.decrease_bandwidth(k_src, k_dest, k_demand, tree, filtered_E)
+                
                 self.add_path_to_result(path, flow)
 
-                if idx == 0:
-                    break
-                idx -= 1
+                self.delete_redundant_edge(lower_bound, filtered_E, path)
 
-            self.update_E(E, filtered_E)
+            self.update_E(E, flow)
 
             if (k_demand == 0): 
                 Res[k_name] = flow
                 continue
+
+            print(f"phase 2")
 
             for i in range(R2):
                 tree = self.build_spanning_tree(V, E, k_src)
@@ -232,12 +234,15 @@ class myAlgorithm:
                 print(f"link: {u}-{v}, bandwidth:{w}")
             print("-----------------")
 
-    def update_E(self, E:Dict[Tuple[str, str], float], newE:Dict[Tuple[str, str], float]):
-        for (u, v), w in newE.items():
-            E[(u, v)] = newE[(u, v)]
+    def update_E(self, E:Dict[Tuple[str, str], float], path:Dict[Tuple[str, str], float]):
+        for (u, v), w in path.items():
+            E[(u, v)] = E[(u, v)] - w
     
-    def update_edge(self, E:Dict[Tuple[str, str], float], edge:Tuple[str, str], capacity:float):
-        E[edge] = capacity
+    def delete_redundant_edge(self, lowerbound:float, E:Dict[Tuple[str, str], float], path:Dict[Tuple[str, str], float]):
+        for edge, w in path.items():
+            if E[edge] < lowerbound:
+                del E[edge]
+    
 class ST:
 
     def __init__(self, V:Set[str], E:Dict[Tuple[str, str], float]) -> None:
@@ -296,7 +301,7 @@ class ST:
             
             visit[u] = True
 
-            if parent[u] != -1:
+            if parent[u] != -1 and u != -1:
                 p, v = idx_node[parent[u]], idx_node[u]
                 mst[(p, v)] = graph[parent[u]][u]
             elif u == node_idx[src]:
