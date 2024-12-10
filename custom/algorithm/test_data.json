@@ -12,14 +12,14 @@
       "A,C": 15,
       "B,D": 7,
       "C,D": 11,
-      "C,E": 11
+      "C,E": 12
     },
     "commodities": [
       {
         "name": "commodity1",
         "source": "A",
         "destination": ["D", "E"],
-        "demand": 10
+        "demand": 12
       },
       {
         "name": "commodity2",

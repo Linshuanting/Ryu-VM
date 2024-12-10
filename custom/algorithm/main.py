@@ -40,8 +40,8 @@ def main():
         V=nodes,
         E=capacities,
         K=commodities,
-        R1=2.0,  # Example R1 value
-        R2=3.0   # Example R2 value
+        R1=2,  # Example R1 value
+        R2=3   # Example R2 value
     )
 
     algorithm.print_result(res)

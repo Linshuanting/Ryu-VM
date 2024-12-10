@@ -9,8 +9,16 @@ class myAlgorithm:
         self.capacities = capacities
         self.commodities = commodities
 
-    def greedy(self, V: Set[str], E: Dict[Tuple[str, str], float], K: List[Dict],
-               R1: float, R2: float) -> Dict[str, Dict[Tuple[str, str], float]]:
+    # TODO
+    # 處理 filterE 與 E 的轉換
+    def greedy(
+            self, 
+            V: Set[str], 
+            E: Dict[Tuple[str, str], float], 
+            K: List[Dict],
+            R1: int, 
+            R2: int
+        ) -> Dict[str, Dict[Tuple[str, str], float]]:
         
         Res = {}
 
@@ -24,23 +32,33 @@ class myAlgorithm:
             lower_bound = k_demand/R1
             filtered_E = {e:E[e] for e in E if E[e] >= lower_bound}
 
+            idx = R1
+
             while k_demand > 0:
                 
                 tree = self.build_spanning_tree(V, filtered_E, k_src)
-                
-                if(self.is_connect_tree(tree, k_src, k_dest)):
+
+                if(self.is_connect_tree(tree, k_src, k_dest) is False):
+                    print(f"{k_name} build an unconnecting tree")
                     break
 
                 k_demand, path = self.decrease_bandwidth(k_src, k_dest, k_demand, tree, filtered_E)
-
                 self.add_path_to_result(path, flow)
-            
+
+                if idx == 0:
+                    break
+                idx -= 1
+
+            self.update_E(E, filtered_E)
+
             if (k_demand == 0): 
+                Res[k_name] = flow
                 continue
 
             for i in range(R2):
                 tree = self.build_spanning_tree(V, E, k_src)
-                if (self.is_connect_tree(tree, k_src, k_dest)):
+                if (self.is_connect_tree(tree, k_src, k_dest) is False):
+                    print(f"{k_name} build an unconnecting tree")
                     break
                 k_demand, path = self.decrease_bandwidth(k_src, k_dest, k_demand, tree, E)
                 self.add_path_to_result(path, flow)
@@ -50,6 +68,9 @@ class myAlgorithm:
             if k_demand != 0:
                 return Res
         
+        print(f"the remaining graph is")
+        self.print_data(E)
+
         return Res
 
     def add_path_to_result(
@@ -67,6 +88,7 @@ class myAlgorithm:
         st = ST(V, E)
         st.turn_negative_edge()
         tree = st.build_by_prim(src)
+        st.turn_negative_edge()
         return st.turn_negative_edge(tree)
 
     def is_connect_tree(self, tree:Dict[Tuple[str, str], float], src:str, dsts:Set[str]) -> bool:
@@ -107,17 +129,18 @@ class myAlgorithm:
         """
         
         adjacency_list = self.tree_to_adjacency_list(tree)
+
         low_demand, path, is_on_path = self.dfs_tree(src, dsts, adjacency_list, E)
 
         if low_demand > demand:
             low_demand = demand
         
-        for u, v in path.items():
+        for u, v in path:
             E[(u, v)] = E[(u, v)] - low_demand
         
         path_dict = {}
 
-        for u, v in path.items():
+        for u, v in path:
             path_dict[(u, v)] = low_demand
 
         return demand-low_demand, path_dict
@@ -163,7 +186,6 @@ class myAlgorithm:
         low_demand = float('inf')
         path = set()
         is_on_path = False
-
         for node in tree.get(src, []):
             is_next_node_on_path = False
 
@@ -187,7 +209,22 @@ class myAlgorithm:
 
         return low_demand, path, is_on_path
     
+    def print_data(self, d:Dict[Tuple[str, str], float] = None, s:Set[Tuple[str, str]] = None):
+
+        if d is not None:
+            for (u, v), w in d.items():
+                print(f"link: {u}-{v}, bandwidth:{w}")
+        elif s is not None:
+            for (u, v) in s:
+                print(f"link: {u}-{v}")
+        else:
+            return
+        
+        print("------ print data finish ----------")
+    
     def print_result(self, result: Dict[str, Dict[Tuple[str, str], float]]):
+
+        print(f"--- print result ---")
 
         for name, res in result.items():
             print(f"name: {name}")
@@ -195,6 +232,12 @@ class myAlgorithm:
                 print(f"link: {u}-{v}, bandwidth:{w}")
             print("-----------------")
 
+    def update_E(self, E:Dict[Tuple[str, str], float], newE:Dict[Tuple[str, str], float]):
+        for (u, v), w in newE.items():
+            E[(u, v)] = newE[(u, v)]
+    
+    def update_edge(self, E:Dict[Tuple[str, str], float], edge:Tuple[str, str], capacity:float):
+        E[edge] = capacity
 class ST:
 
     def __init__(self, V:Set[str], E:Dict[Tuple[str, str], float]) -> None:
