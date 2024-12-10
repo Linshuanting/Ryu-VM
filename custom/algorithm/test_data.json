@@ -1,0 +1,32 @@
+{
+    "nodes": ["A", "B", "C", "D", "E"],
+    "links": [
+      ["A", "B"],
+      ["A", "C"],
+      ["B", "D"],
+      ["C", "D"],
+      ["C", "E"]
+    ],
+    "capacities": {
+      "A,B": 10,
+      "A,C": 15,
+      "B,D": 7,
+      "C,D": 11,
+      "C,E": 11
+    },
+    "commodities": [
+      {
+        "name": "commodity1",
+        "source": "A",
+        "destination": ["D", "E"],
+        "demand": 10
+      },
+      {
+        "name": "commodity2",
+        "source": "B",
+        "destination": ["D"],
+        "demand": 5
+      }
+    ]
+  }
+  
