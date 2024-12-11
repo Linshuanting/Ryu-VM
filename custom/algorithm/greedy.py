@@ -24,7 +24,7 @@ class myAlgorithm:
             flow = {}
             k_demand = k['demand']
             k_src = k['source']
-            k_dest = k['destination']
+            k_dest = k['destinations']
             k_name = k['name']
 
             lower_bound = k_demand/R1
@@ -40,7 +40,7 @@ class myAlgorithm:
                 self.print_data(tree)
 
                 if(self.is_connect_tree(tree, k_src, k_dest) is False):
-                    print(f"{k_name} build an unconnecting tree")
+                    print(f"{k_name} in phase 1 build an unconnecting tree")
                     break
 
                 k_demand, path = self.decrease_bandwidth(k_src, k_dest, k_demand, tree, filtered_E)
@@ -59,8 +59,9 @@ class myAlgorithm:
 
             for i in range(R2):
                 tree = self.build_spanning_tree(V, E, k_src)
+                self.print_data(tree)
                 if (self.is_connect_tree(tree, k_src, k_dest) is False):
-                    print(f"{k_name} build an unconnecting tree")
+                    print(f"{k_name} in phase 2 build an unconnecting tree")
                     break
                 k_demand, path = self.decrease_bandwidth(k_src, k_dest, k_demand, tree, E)
                 self.add_path_to_result(path, flow)

@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Dict, Tuple, List, Set
 from greedy import myAlgorithm  # 替换为你的主代码文件名
 
@@ -12,16 +13,17 @@ def load_test_data(filename: str) -> Dict:
     with open(filename, 'r') as file:
         return json.load(file)
 
-def convert_json_to_inputs(data: Dict) -> Tuple[Set[str], Dict[Tuple[str, str], float], List[Dict]]:
+def convert_json_to_inputs(topo: Dict) -> Tuple[Set[str], Dict[Tuple[str, str], float], List[Dict]]:
     """
     Convert JSON data to the required format for myAlgorithm.
 
     :param data: Test data loaded from the JSON file.
     :return: Tuple of nodes, edges, capacities, and commodities.
     """
+    data = topo['topologies'][3]
     nodes = set(data["nodes"])
     links = data["links"]
-    capacities = {tuple(link.split(',')): value for link, value in data["capacities"].items()}
+    capacities = {tuple(re.split(r'[,-]', link)): value for link, value in data["capacities"].items()}
     commodities = data["commodities"]
     return nodes, links, capacities, commodities
 
