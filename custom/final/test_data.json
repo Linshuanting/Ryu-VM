@@ -1,0 +1,256 @@
+{
+    "topologies": [
+        {
+            "name": "Simple Topology", 
+            "nodes": ["A", "B", "C", "D", "E"],
+            "links": [
+            ["A", "B"],
+            ["A", "C"],
+            ["B", "D"],
+            ["C", "D"],
+            ["C", "E"]
+            ],
+            "capacities": {
+                "A,B": 10,
+                "A,C": 15,
+                "B,D": 7,
+                "C,D": 11,
+                "C,E": 12
+            },
+            "commodities": [
+            {
+                "name": "commodity1",
+                "source": "A",
+                "destinations": ["D", "E"],
+                "demand": 12
+            },
+            {
+                "name": "commodity2",
+                "source": "B",
+                "destinations": ["D"],
+                "demand": 5
+            }
+            ]
+        },
+        {
+            "name": "Mesh Topology",
+            "nodes": ["h1", "h2", "h3", "h4", "h5", "h6", "c1", "c2", "c4", "c5", "c6"],
+            "links": [
+                ["h1", "h2"], ["h2", "h1"],
+                ["h1", "h3"], ["h3", "h1"],
+                ["h2", "h3"], ["h3", "h2"],
+                ["h2", "h4"], ["h4", "h2"],
+                ["h3", "h4"], ["h4", "h3"],
+                ["h3", "h5"], ["h5", "h3"],
+                ["h4", "h5"], ["h5", "h4"],
+                ["h4", "h6"], ["h6", "h4"],
+                ["h5", "h6"], ["h6", "h5"],
+                ["c1", "h1"], ["h1", "c1"],
+                ["c2", "h2"], ["h2", "c2"],
+                ["h4", "c4"], ["c4", "h4"],
+                ["h6", "c6"], ["c6", "h6"],
+                ["h5", "c5"], ["c5", "h5"]
+            ],
+            "capacities": {
+                "h1-h2": 10, "h2-h1": 10,
+                "h1-h3": 10, "h3-h1": 10,
+                "h2-h3": 10, "h3-h2": 10,
+                "h2-h4": 10, "h4-h2": 10,
+                "h3-h4": 10, "h4-h3": 10,
+                "h3-h5": 10, "h5-h3": 10,
+                "h4-h5": 10, "h5-h4": 10,
+                "h4-h6": 10, "h6-h4": 10,
+                "h5-h6": 10, "h6-h5": 10,
+                "c1-h1": 50, "h1-c1": 50,
+                "c2-h2": 50, "h2-c2": 50,
+                "h4-c4": 50, "c4-h4": 50,
+                "h6-c6": 50, "c6-h6": 50,
+                "h5-c5": 50, "c5-h5": 50
+            },
+            "commodities": [
+                {
+                    "name": "commodity1",
+                    "source": "c1",
+                    "destinations": ["c4", "c5"],
+                    "demand": 15
+                },
+                {
+                    "name": "commodity2",
+                    "source": "c2",
+                    "destinations": ["c5", "c6"],
+                    "demand": 14
+                }
+            ]
+        },
+        {
+            "name": "Double Spine-Leaf Topology with Bidirectional Links",
+            "nodes": [
+              "Spine1", "Spine2", "Spine3", "Spine4",
+              "Leaf1", "Leaf2", "Leaf3", "Leaf4", "Leaf5", "Leaf6",
+              "Host1", "Host2", "Host3", "Host4", "Host5", "Host6", "Host7", "Host8", "Host9", "Host10", "Host11", "Host12"
+            ],
+            "links": [
+              ["Spine1", "Leaf1"], ["Leaf1", "Spine1"],
+              ["Spine1", "Leaf2"], ["Leaf2", "Spine1"],
+              ["Spine1", "Leaf3"], ["Leaf3", "Spine1"],
+              ["Spine1", "Leaf4"], ["Leaf4", "Spine1"],
+              ["Spine1", "Leaf5"], ["Leaf5", "Spine1"],
+              ["Spine1", "Leaf6"], ["Leaf6", "Spine1"],
+              ["Spine2", "Leaf1"], ["Leaf1", "Spine2"],
+              ["Spine2", "Leaf2"], ["Leaf2", "Spine2"],
+              ["Spine2", "Leaf3"], ["Leaf3", "Spine2"],
+              ["Spine2", "Leaf4"], ["Leaf4", "Spine2"],
+              ["Spine2", "Leaf5"], ["Leaf5", "Spine2"],
+              ["Spine2", "Leaf6"], ["Leaf6", "Spine2"],
+              ["Spine3", "Leaf1"], ["Leaf1", "Spine3"],
+              ["Spine3", "Leaf2"], ["Leaf2", "Spine3"],
+              ["Spine3", "Leaf3"], ["Leaf3", "Spine3"],
+              ["Spine3", "Leaf4"], ["Leaf4", "Spine3"],
+              ["Spine3", "Leaf5"], ["Leaf5", "Spine3"],
+              ["Spine3", "Leaf6"], ["Leaf6", "Spine3"],
+              ["Spine4", "Leaf1"], ["Leaf1", "Spine4"],
+              ["Spine4", "Leaf2"], ["Leaf2", "Spine4"],
+              ["Spine4", "Leaf3"], ["Leaf3", "Spine4"],
+              ["Spine4", "Leaf4"], ["Leaf4", "Spine4"],
+              ["Spine4", "Leaf5"], ["Leaf5", "Spine4"],
+              ["Spine4", "Leaf6"], ["Leaf6", "Spine4"],
+              ["Leaf1", "Host1"], ["Host1", "Leaf1"],
+              ["Leaf1", "Host2"], ["Host2", "Leaf1"],
+              ["Leaf2", "Host3"], ["Host3", "Leaf2"],
+              ["Leaf2", "Host4"], ["Host4", "Leaf2"],
+              ["Leaf3", "Host5"], ["Host5", "Leaf3"],
+              ["Leaf3", "Host6"], ["Host6", "Leaf3"],
+              ["Leaf4", "Host7"], ["Host7", "Leaf4"],
+              ["Leaf4", "Host8"], ["Host8", "Leaf4"],
+              ["Leaf5", "Host9"], ["Host9", "Leaf5"],
+              ["Leaf5", "Host10"], ["Host10", "Leaf5"],
+              ["Leaf6", "Host11"], ["Host11", "Leaf6"],
+              ["Leaf6", "Host12"], ["Host12", "Leaf6"]
+            ],
+            "capacities": {
+              "Spine1,Leaf1": 20, "Leaf1,Spine1": 20,
+              "Spine1,Leaf2": 20, "Leaf2,Spine1": 20,
+              "Spine1,Leaf3": 20, "Leaf3,Spine1": 20,
+              "Spine1,Leaf4": 20, "Leaf4,Spine1": 20,
+              "Spine1,Leaf5": 20, "Leaf5,Spine1": 20,
+              "Spine1,Leaf6": 20, "Leaf6,Spine1": 20,
+              "Spine2,Leaf1": 20, "Leaf1,Spine2": 20,
+              "Spine2,Leaf2": 20, "Leaf2,Spine2": 20,
+              "Spine2,Leaf3": 20, "Leaf3,Spine2": 20,
+              "Spine2,Leaf4": 20, "Leaf4,Spine2": 20,
+              "Spine2,Leaf5": 20, "Leaf5,Spine2": 20,
+              "Spine2,Leaf6": 20, "Leaf6,Spine2": 20,
+              "Spine3,Leaf1": 20, "Leaf1,Spine3": 20,
+              "Spine3,Leaf2": 20, "Leaf2,Spine3": 20,
+              "Spine3,Leaf3": 20, "Leaf3,Spine3": 20,
+              "Spine3,Leaf4": 20, "Leaf4,Spine3": 20,
+              "Spine3,Leaf5": 20, "Leaf5,Spine3": 20,
+              "Spine3,Leaf6": 20, "Leaf6,Spine3": 20,
+              "Spine4,Leaf1": 20, "Leaf1,Spine4": 20,
+              "Spine4,Leaf2": 20, "Leaf2,Spine4": 20,
+              "Spine4,Leaf3": 20, "Leaf3,Spine4": 20,
+              "Spine4,Leaf4": 20, "Leaf4,Spine4": 20,
+              "Spine4,Leaf5": 20, "Leaf5,Spine4": 20,
+              "Spine4,Leaf6": 20, "Leaf6,Spine4": 20,
+              "Leaf1,Host1": 30, "Host1,Leaf1": 30,
+              "Leaf1,Host2": 30, "Host2,Leaf1": 30,
+              "Leaf2,Host3": 30, "Host3,Leaf2": 30,
+              "Leaf2,Host4": 30, "Host4,Leaf2": 30,
+              "Leaf3,Host5": 30, "Host5,Leaf3": 30,
+              "Leaf3,Host6": 30, "Host6,Leaf3": 30,
+              "Leaf4,Host7": 30, "Host7,Leaf4": 30,
+              "Leaf4,Host8": 30, "Host8,Leaf4": 30,
+              "Leaf5,Host9": 30, "Host9,Leaf5": 30,
+              "Leaf5,Host10": 30, "Host10,Leaf5": 30,
+              "Leaf6,Host11": 30, "Host11,Leaf6": 30,
+              "Leaf6,Host12": 30, "Host12,Leaf6": 30
+            },
+            "commodities": [
+              {
+                "name": "commodity1",
+                "source": "Host1",
+                "destinations": ["Host7", "Host8", "Host12"],
+                "demand": 30
+              },
+              {
+                "name": "commodity2",
+                "source": "Host2",
+                "destinations": ["Host9", "Host10"],
+                "demand": 15
+              },
+              {
+                "name": "commodity3",
+                "source": "Host3",
+                "destinations": ["Host4", "Host5", "Host6"],
+                "demand": 20
+              },
+              {
+                "name": "commodity4",
+                "source": "Host11",
+                "destinations": ["Host1", "Host2", "Host3"],
+                "demand": 25
+              }
+            ]
+          },
+          {
+            "name": "Reduced Spine-Leaf Topology with Bidirectional Links",
+            "nodes": [
+              "Spine1", "Spine2",
+              "Leaf1", "Leaf2", "Leaf3",
+              "Host1", "Host2", "Host3", "Host4", "Host5", "Host6"
+            ],
+            "links": [
+              ["Spine1", "Leaf1"], ["Leaf1", "Spine1"],
+              ["Spine1", "Leaf2"], ["Leaf2", "Spine1"],
+              ["Spine1", "Leaf3"], ["Leaf3", "Spine1"],
+              ["Spine2", "Leaf1"], ["Leaf1", "Spine2"],
+              ["Spine2", "Leaf2"], ["Leaf2", "Spine2"],
+              ["Spine2", "Leaf3"], ["Leaf3", "Spine2"],
+              ["Leaf1", "Host1"], ["Host1", "Leaf1"],
+              ["Leaf1", "Host2"], ["Host2", "Leaf1"],
+              ["Leaf2", "Host3"], ["Host3", "Leaf2"],
+              ["Leaf2", "Host4"], ["Host4", "Leaf2"],
+              ["Leaf3", "Host5"], ["Host5", "Leaf3"],
+              ["Leaf3", "Host6"], ["Host6", "Leaf3"]
+            ],
+            "capacities": {
+              "Spine1,Leaf1": 20, "Leaf1,Spine1": 20,
+              "Spine1,Leaf2": 20, "Leaf2,Spine1": 20,
+              "Spine1,Leaf3": 20, "Leaf3,Spine1": 20,
+              "Spine2,Leaf1": 20, "Leaf1,Spine2": 20,
+              "Spine2,Leaf2": 20, "Leaf2,Spine2": 20,
+              "Spine2,Leaf3": 20, "Leaf3,Spine2": 20,
+              "Leaf1,Host1": 50, "Host1,Leaf1": 50,
+              "Leaf1,Host2": 50, "Host2,Leaf1": 50,
+              "Leaf2,Host3": 50, "Host3,Leaf2": 50,
+              "Leaf2,Host4": 50, "Host4,Leaf2": 50,
+              "Leaf3,Host5": 50, "Host5,Leaf3": 50,
+              "Leaf3,Host6": 50, "Host6,Leaf3": 50
+            },
+            "commodities": [
+              {
+                "name": "commodity1",
+                "source": "Host1",
+                "destinations": ["Host5", "Host6"],
+                "demand": 20
+              },
+              {
+                "name": "commodity2",
+                "source": "Host2",
+                "destinations": ["Host3", "Host4"],
+                "demand": 15
+              },
+              {
+                "name": "commodity3",
+                "source": "Host5",
+                "destinations": ["Host1", "Host2", "Host4"],
+                "demand": 30
+              }
+            ]
+          }
+          
+          
+    ]
+    
+  }
+  
