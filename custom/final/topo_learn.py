@@ -10,7 +10,7 @@ from ryu.lib.packet import lldp
 from ryu.lib.packet import ipv6, icmpv6
 from ryu.lib import hub
 from ryu.exception import RyuException
-from topo_data import Topology
+from topo_data_structure import Topology
 from ryu.app.wsgi import WSGIApplication
 from topo_rest_controller import TopologyRestController
 
@@ -25,18 +25,18 @@ class SimpleSwitch15(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_5.OFP_VERSION]
     _CONTEXTS = {'wsgi': WSGIApplication}
 
-
     def __init__(self, *args, **kwargs):
         super(SimpleSwitch15, self).__init__(*args, **kwargs)
         self.topo = Topology()
-        # wsgi = kwargs['wsgi']
-        # wsgi.register(TopologyRestController, {'topology_data': self.topo})
-
+    
         print("Initializing WSGI service...")
         wsgi = kwargs.get('wsgi')
         if wsgi:
             print("WSGI object loaded successfully.")
-            wsgi.register(TopologyRestController, {'topology_data': self.topo})
+            wsgi.register(TopologyRestController, {
+                'topology_data': self.topo,
+                'controller': self
+                })
             print("TopologyController registered.")
         else:
             print("Error: WSGIApplication is not loaded.")
@@ -63,6 +63,11 @@ class SimpleSwitch15(app_manager.RyuApp):
         msg = parser.OFPPortDescStatsRequest(datapath)
         datapath.send_msg(msg)
 
+        print(f"dp: {datapath}")
+        if datapath.id == 1:
+            print("Get dp id is 1 data")
+            self.topo.set_test_dp(datapath, datapath.id)
+        self.topo.set_datapath(datapath)
     
     # We are not using this function
     def delete_flow(self, datapath):
@@ -120,10 +125,10 @@ class SimpleSwitch15(app_manager.RyuApp):
         dst_dpid = msg.datapath.id
         dst_port_no = msg.match['in_port']
 
-        self.topo.build_edge(src_dpid, src_port_no, dst_dpid, dst_port_no)
+        self.topo.set_link(src_dpid, dst_dpid, src_port_no, dst_port_no)
 
         print(f"------ switch {dst_dpid} -----------")
-        self.topo.get_links()
+        self.topo.print_links()
 
     def send_lldp_out(self, datapath, port):
         
@@ -141,8 +146,9 @@ class SimpleSwitch15(app_manager.RyuApp):
         
         for p in body:
             if p.port_no != ofproto_v1_5.OFPP_CONTROLLER and p.port_no != ofproto_v1_5.OFPP_LOCAL:
-                self.topo.set_port_in_switch(dp.id, p.port_no)
-                self.topo.set_switch_port_mac(p.hw_addr, p.port_no, dp.id)
+                # self.topo.set_port_in_switch(dp.id, p.port_no)
+                self.topo.set_sw_mac_to_context(p.hw_addr, dp.id, p.port_no)
+                self.topo.set_datapath(dp, dp.id)
                 self.send_lldp_out(dp, p.port_no)
                 
     
@@ -183,30 +189,34 @@ class SimpleSwitch15(app_manager.RyuApp):
 
     def handle_ndp_dad(self, dp, in_port, data):
         
-        if (self.topo.is_switch_mac(data['src_mac'])):
+        if (self.topo.contain_sw_mac(data['src_mac'])):
             return
 
-        if (self.topo.is_ip_is_used(data['target_ip']) 
+        if (self.topo.contain_IP(data['target_ip']) 
             and data['target_ip'].startswith('ff') is False):
             # reply dad msg
             return
             
         self.topo.set_host(data['src_mac'], data['target_ip'], dp.id, in_port)
-        self.topo.get_hosts()
+        self.topo.set_link(data['src_mac'], dp.id, 0, in_port)
+        self.topo.set_link(dp.id, data['src_mac'], in_port, 0)
+        self.topo.print_hosts()
 
     def handle_ndp_ns(self, dp, in_port, data):
 
-        if (self.topo.is_host(data['src_mac']) is False):
+        if (self.topo.contain_host(mac=data['src_mac']) is False):
             return
         
         self.topo.set_host(data['src_mac'], data['src_ip'], dp.id, in_port)
+        self.topo.set_link(data['src_mac'], dp.id, 0, in_port)
+        self.topo.set_link(dp.id, data['src_mac'], in_port, 0)
         self.send_ndp_na_out(dp, in_port, data)
 
-        self.topo.get_hosts()
+        self.topo.print_hosts()
 
     def send_ndp_na_out(self, datapath, port, data):
         
-        src_mac = self.topo.get_mac_from_ip(data['target_ip'])
+        src_mac = self.topo.get_host_mac(host_ip=data['target_ip'])
         if src_mac is None:
             print(f"target mac {data['target_ip']} is not find")
             return
@@ -222,22 +232,26 @@ class SimpleSwitch15(app_manager.RyuApp):
 
     def handle_ndp_rs(self, dp, in_port, data):
         
-        if (self.topo.is_host(data['src_mac']) is False):
+        if (self.topo.contain_host(mac=data['src_mac']) is False):
             return
         
         self.topo.set_host(data['src_mac'], data['src_ip'], dp.id, in_port)
-        self.topo.get_hosts()
+        self.topo.set_link(data['src_mac'], dp.id, 0, in_port)
+        self.topo.set_link(dp.id, data['src_mac'], in_port, 0)
+        self.topo.print_hosts()
 
     def handle_mld_report(self, dp, in_port, data):
 
-        if (self.topo.is_host(data['src_mac']) is False):
+        if (self.topo.contain_host(mac=data['src_mac']) is False):
             return
         if (data['src_ip'] == '::'):
             print(f"data: {data}")
             return
         
         self.topo.set_host(data['src_mac'], data['src_ip'], dp.id, in_port)
-        self.topo.get_hosts()
+        self.topo.set_link(data['src_mac'], dp.id, 0, in_port)
+        self.topo.set_link(dp.id, data['src_mac'], in_port, 0)
+        self.topo.print_hosts()
 
 class Icmpv6Packet(object):
 
@@ -438,7 +452,7 @@ class LLDPPacket(object):
             raise LLDPPacket.LLDPUnknownFormat()
 
         lldp_header = pkt.get_protocol(lldp.lldp)
-        
+
         tlv_chassis = lldp_header.tlvs[0]
         tlv_port = lldp_header.tlvs[1]
         
@@ -448,10 +462,14 @@ class LLDPPacket(object):
             # 提取數字部分並轉換為整數
             src_dpid = int(chassis_id_str.split(':')[1], 16)    # 以16進制轉換
 
-        port_id_str = tlv_port.port_id.decode('utf-8')
         src_port = 0
-        if port_id_str.startswith('port:'):
-            src_port = int(port_id_str.split(':')[1])  
+        if hasattr(tlv_port, 'port_id') and tlv_port.port_id:
+            port_id_value = int.from_bytes(tlv_port.port_id, byteorder='big')
+            print(f"port_id_value: {port_id_value}")
+            src_port = port_id_value
+        else:
+            print("port_id is missing or empty.")
+            src_port = 0 
 
         return src_dpid, src_port
     

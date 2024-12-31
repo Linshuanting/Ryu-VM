@@ -1,11 +1,11 @@
 import json
+import re
+from utils import str_to_tuple
 
 class TopologyParser:
     def __init__(self, data = None):
         self.nodes = []
         self.links = []
-        self.host_to_mac = {}
-        self.mac_to_host = {}
         self.data = data
 
     def parse_data(self):
@@ -13,43 +13,29 @@ class TopologyParser:
         解析 JSON 数据，将其转换为所需格式。
         """
         # 提取 nodes
-        self.nodes, self.mac_to_host, self.host_to_mac = self.parse_node(self.data)
+        self.nodes = self.parse_node(self.data)
         self.links = self.parse_link(self.data)
-
 
     def parse_node(self, data):
         
-        nodes = []
+        nodes = set()
 
-        switchports = data["switchports"]
-        nodes = list(switchports.keys())
-
-        hosts = data["hosts"]
-        m_to_h = {}
-        h_to_m = {}
-        for idx, mac in enumerate(hosts.keys(), start=1):
-            m_to_h[mac] = f"h{idx}"
-            h_to_m[f"h{idx}"] = mac
+        links = data["links"]
+        for link in links.keys():
+            u, v = str_to_tuple(link)
+            nodes.add(u)
+            nodes.add(v)
         
-        combined_nodes = nodes + list(m_to_h.values())
-
-        return combined_nodes, m_to_h, h_to_m
+        return list(nodes)
     
     def parse_link(self, data):
         
         links_list = []
         links = data["links"]
 
-        for src, target in links.items():
-            for dst, ports in target.items():
-                links_list.append([src, dst])
-        
-        hosts = data["hosts"]
-        for host_mac, context in hosts.items():
-            host = self.mac_to_host[host_mac]
-            sw = context["sw_id"]
-            links_list.append([host, f'{sw}'])
-            links_list.append([f'{sw}', host])
+        for link in links.keys():
+            [u, v] = str_to_tuple(link)
+            links_list.append([u, v])
 
         return links_list
 
@@ -80,3 +66,6 @@ class TopologyParser:
         print(self.nodes)
         print("-- Links --")
         print(self.links)
+
+    def serialize(self, data):
+        pass

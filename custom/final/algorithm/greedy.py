@@ -41,7 +41,7 @@ class myAlgorithm:
             while k_demand > 0:
                 
                 tree = self.build_spanning_tree(V, filtered_E, k_src)
-                # self.print_data(tree)
+                self.print_data(tree)
                 if(self.is_connect_tree(tree, k_src, k_dest) is False):
                     print(f"{k_name} in phase 1 build an unconnecting tree")
                     break
@@ -59,7 +59,7 @@ class myAlgorithm:
 
             for i in range(R2):
                 tree = self.build_spanning_tree(V, E, k_src)
-                # self.print_data(tree)
+                self.print_data(tree)
                 if (self.is_connect_tree(tree, k_src, k_dest) is False):
                     print(f"{k_name} in phase 2 build an unconnecting tree")
                     break

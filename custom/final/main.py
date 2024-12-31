@@ -6,7 +6,7 @@ from algorithm.greedy import myAlgorithm  # 替换为你的主代码文件名
 from topo_data import Topology
 from rest_client import RestAPIClient
 from topo_parser import TopologyParser
-from utils import print_json
+from utils import print_json, to_dict
 
 def start_controller():
     ryu_command = ["ryu-manager", "custom/topo_learn.py"]  # 替换为你的 Ryu 应用路径
@@ -21,7 +21,7 @@ def start_controller():
         print(f"Failed to start Ryu controller: {e}")
         return None
     
-def run_algorithm(nodes, links, caps, coms):
+def run_algorithm(nodes, links, caps, coms) -> Dict[str, Dict[Tuple[str, str], float]]:
     
     # Nodes, Links, Capacities, Commodities
     algorithm = myAlgorithm(nodes, links, caps, coms)
@@ -29,6 +29,7 @@ def run_algorithm(nodes, links, caps, coms):
     print("------- result --------")
     algorithm.print_result(res)
 
+    return res
 
 def get_bandwidth(links):
     
@@ -80,7 +81,7 @@ def print_commodities(commodities):
     for data in commodities:
         print(json.dumps(data, indent=2))
 
-url = "http://127.0.0.1:8080/topology"
+url = "http://127.0.0.1:8080"
 
 if __name__ == "__main__":
     print("Program started...")
@@ -91,20 +92,26 @@ if __name__ == "__main__":
     parser = TopologyParser(data_from_controller)
     parser.run()
 
-    # print("--- start print data ---")
-    # parser.print_parse_data()
+    print("--- start print data ---")
+    parser.print_parse_data()
 
     nodes = parser.get_nodes()
     links = parser.get_links()
     capacities = get_bandwidth(links)
-    commodities = get_commodity(nodes, 2)
+    commodities = get_commodity(nodes, 1)
 
     print(nodes)
     print(links)
     print(capacities)
     print_commodities(commodities)
 
-    run_algorithm(nodes, links, capacities, commodities)
+    res = run_algorithm(nodes, links, capacities, commodities)
+    print(res)
+    packet = to_dict(res)
+    print(packet)
+    print(client.post_json_data(packet))
+
+
     
 
 

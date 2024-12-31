@@ -3,7 +3,8 @@ from ryu.controller import ofp_event
 from ryu.controller.handler import CONFIG_DISPATCHER, MAIN_DISPATCHER
 from ryu.controller.handler import set_ev_cls
 from ryu.ofproto import ofproto_v1_3, ofproto_v1_5
-import myparser 
+import myparser
+import myparser as sm_parser
 
 class SimpleSwitch(app_manager.RyuApp):
     
@@ -14,6 +15,7 @@ class SimpleSwitch(app_manager.RyuApp):
         
         # super().__init__會去呼叫父類別的initializer__init__
         super(SimpleSwitch, self).__init__(*args, **kwargs)
+        self.group_id_counter = 0
         
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
@@ -27,8 +29,12 @@ class SimpleSwitch(app_manager.RyuApp):
         self.add_flow(datapath, 0, match, actions)
     
         print(f"------- test select group adding: {datapath.id} ----------")
-        self.send_group_mod(datapath)
-    
+        port_weight  = [(2, 20), (1, 20)]
+        # self.send_group_mod(datapath)
+        print(f"datapath type: {type(datapath)}")
+        print(f"datapath: {datapath}")
+        self.send_group_selection_method(datapath, port_weight)
+
     def add_flow(self, datapath, priority, match, actions, buffer_id=None):
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
@@ -108,4 +114,43 @@ class SimpleSwitch(app_manager.RyuApp):
         # print(f"req length: {len(req.serialize())}")
         datapath.send_msg(req)
 
-    
+    def send_group_selection_method(self, datapath, port_weight_list):
+
+        ofp = datapath.ofproto
+        parser = datapath.ofproto_parser
+
+        buckets = []
+        bucket_id = 0
+
+        selection_method = "hash"
+        selection_method_param = 0
+
+        for port, weight in port_weight_list:
+            actions = [parser.OFPActionOutput(port)]
+            properties = [parser.OFPGroupBucketPropWeight(type_= ofp.OFPGBPT_WEIGHT, weight=weight)]
+            bucket = parser.OFPBucket(
+                actions=actions,
+                bucket_id=bucket_id,
+                properties = properties
+            )
+            buckets.append(bucket)
+            bucket_id+=1
+        print(f"bucket:{buckets}")
+        property = sm_parser.OFPGroupPropExperimenter(
+            type_=ofp.OFPGPT_EXPERIMENTER,
+            selection_method=selection_method,
+            selection_method_param = selection_method_param,
+            ipv6_flabel=sm_parser.OFP_GROUP_PROP_FIELD_MATCH_ALL_IPV6_FLABEL
+        )
+        properties = [property]
+        req = parser.OFPGroupMod(datapath=datapath, 
+                                    command=ofp.OFPGC_ADD,
+                                    type_=ofp.OFPGT_SELECT, 
+                                    group_id=self.group_id_counter,
+                                    # command_bucket_id=command_bucket_id, 
+                                    buckets=buckets,
+                                    properties=properties
+                                    )
+        print(f"req:{req}")
+        datapath.send_msg(req)
+        self.group_id_counter+=1
