@@ -29,8 +29,10 @@ class TopologyRestController(ControllerBase):
             print(f"data type: {type(data)}")
             print(json.dumps(data, indent=4, ensure_ascii=False))
 
-            self.topology_data.set_commodities_and_paths(data)
+            self.topology_data.set_commodities_and_paths(data['commodities_and_paths'])
+            self.controller.assign_commodities_hosts_to_multi_ip(data['commodities_data'])
             self.controller.send_instruction()
+            # self.controller.test()
             
 
             # 返回响应

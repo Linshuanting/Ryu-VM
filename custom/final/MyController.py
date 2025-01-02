@@ -1,6 +1,8 @@
 from topo_learn import SimpleSwitch15
 from typing import List, Dict, Tuple, Set
 import selection_method_parser as sm_parser
+from ryu.lib.packet import ethernet, ether_types
+from multi_db import MultiGroupDB
 
 class MyController(SimpleSwitch15):
 
@@ -8,34 +10,82 @@ class MyController(SimpleSwitch15):
         super(MyController, self).__init__(*args, **kwargs)
         print("My Controller Initialize")
         self.group_id_counter = 1
+        self.priority = 100
+        self.multi_db = MultiGroupDB()
 
     def test(self):
         # test function
+        dp_id, group_id = 1, 9999
+        dp = self.topo.get_datapath(dp_id)
+        self.send_flowMod_to_switch(dp, 1, "ff38::1", group_id)
         pass
 
     def send_instruction(self) -> Dict[str, list]:
 
         print ("------ start send instruction to switchs ------")
 
-        flow = self.topo.get_commodities_and_paths()
-        for commodity, context in flow.items():
+        commodities = self.topo.get_commodities()
+        for commodity in commodities:
             print(f"-- {commodity} --")
             switch_to_port_bandwidth = {}
+            switch_to_inport = {}
+            start_host = None
+            nodes = set()
             
-            for u, v_bw_list in context.items():
-                if self.topo.is_host(u):
-                    continue
-                port_bw_list = []
-                for v, bw in v_bw_list:
-                    port_u, port_v = self.topo.get_link(u, v)
-                    port_bw_list.append((port_u, bw))
-                switch_to_port_bandwidth[u] = port_bw_list
+            paths = self.topo.get_paths(commodity)
+            for (u, v), bw in paths.items():
+                port_u, port_v = self.topo.get_link(u, v)
+                
+                # 判斷每個 switch 要流出的 port，以及其權重
+                if u not in switch_to_port_bandwidth:
+                    switch_to_port_bandwidth[u] = [(port_u, bw)]
+                else:
+                    switch_to_port_bandwidth[u].append((port_u, bw))
+                # 判斷每個 switch 流入口，來當作 match 條件
+                if v not in switch_to_inport:
+                    switch_to_inport[v] = [port_v]
+                else:
+                    switch_to_inport[v].append(port_v)
+                # 判斷從哪個 host 開始，並之後找出其多播群組 ip，用來當作 match 條件
+                if u.startswith('h'):
+                    start_host = u
 
-            for dp_id, port_bw_list in switch_to_port_bandwidth.items():
+                if not u.startswith('h'):
+                    nodes.add(u)
+                if not v.startswith('h'):
+                    nodes.add(v)
+
+            multi_ip = self.multi_db.get_ip_for_commodity(commodity)
+            if multi_ip is None:
+                # 測試用 ip
+                multi_ip = "ff38::8888"
+
+            for dp_id in nodes:
                 dp = self.topo.get_datapath(dp_id)
-                self.send_group_selection_method(dp, port_bw_list)
+                group_id = self.group_id_counter
+                port_bw_list = switch_to_port_bandwidth[dp_id]
+                # 處理每個 switch 的 output 流向
+                self.send_group_selection_method(dp, port_bw_list, group_id)
+                # 處理每個 switch 的 inport 判斷
+                for inport in switch_to_inport[dp_id]:
+                    self.send_flowMod_to_switch(dp, inport, multi_ip, group_id)
+                
+                self.group_id_counter+=1
 
-    def send_group_selection_method(self, datapath, port_weight_list):
+    def send_flowMod_to_switch(self, datapath, inport, multi_ip, group_id):
+        
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+        match = parser.OFPMatch(
+            in_port=inport,
+            eth_type=ether_types.ETH_TYPE_IPV6,
+            ipv6_dst=multi_ip
+        )
+        actions = [parser.OFPActionGroup(group_id)]
+        # actions = [parser.OFPActionOutput(1)]
+        self.add_flow(datapath, self.priority, match, actions)
+
+    def send_group_selection_method(self, datapath, port_weight_list, group_id):
 
         ofp = datapath.ofproto
         parser = datapath.ofproto_parser
@@ -67,11 +117,17 @@ class MyController(SimpleSwitch15):
         req = parser.OFPGroupMod(datapath=datapath, 
                                     command=ofp.OFPGC_ADD,
                                     type_=ofp.OFPGT_SELECT, 
-                                    group_id=self.group_id_counter,
+                                    group_id=group_id,
                                     # command_bucket_id=command_bucket_id, 
                                     buckets=buckets,
                                     properties=properties
                                     )
         
         datapath.send_msg(req)
-        self.group_id_counter+=1
+
+    def assign_commodities_hosts_to_multi_ip(self, commodities_data):
+        for data in commodities_data:
+            group_ip = self.multi_db.assign_commodity_to_dynamic_ip(data['name'])
+            self.multi_db.add_host_to_group(group_ip, data['source'])
+            for dst in data['destinations']:
+                self.multi_db.add_host_to_group(group_ip, dst)

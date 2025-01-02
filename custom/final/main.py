@@ -98,7 +98,7 @@ if __name__ == "__main__":
     nodes = parser.get_nodes()
     links = parser.get_links()
     capacities = get_bandwidth(links)
-    commodities = get_commodity(nodes, 1)
+    commodities = get_commodity(nodes, 2)
 
     print(nodes)
     print(links)
@@ -106,9 +106,12 @@ if __name__ == "__main__":
     print_commodities(commodities)
 
     res = run_algorithm(nodes, links, capacities, commodities)
-    print(res)
-    packet = to_dict(res)
-    print(packet)
+    packet = {
+        'commodities_and_paths': to_dict(res),
+        'commodities_data': commodities
+    }
+    # print(type(packet))
+    # print(packet)
     print(client.post_json_data(packet))
 
 

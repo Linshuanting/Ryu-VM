@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 
 class Topology():
 
+    MULTI_GROUP_IP_STARTWITH = 'ff38'
+
     def __init__(self):
         
         # (u, v) link to (p, q) port using on switch u, v, respectively
@@ -30,7 +32,10 @@ class Topology():
         self.sw_mac_to_sw_context = {}
         # the commodity to paths, calculating by algorithm
         # commodity: {node1: [each of nodes the node1 connects]}
+        # commodity: {(u, v): bandwidth}
         self.commodities_to_paths = {}
+        # save all commodity
+        self.commodities = []
         self.host_counter = 0
 
         self.test_datapath = None
@@ -89,6 +94,29 @@ class Topology():
             return self.hosts[host_name]['IPs']
         elif host_mac is not None and self.get_hostName_from_mac(host_mac) in self.hosts:
             return self.hosts[self.get_hostName_from_mac(host_mac)]['IPs']
+
+    def get_host_multi_group_IP(self, host_name=None, host_mac=None) -> str:
+        
+        if host_name is not None:
+            name = host_name
+        elif host_mac is not None:
+            name = self.get_hostName_from_mac(host_mac)
+            if name is None:
+                logger.warning(f"the mac:{host_mac} doesn't exist in hosts database")
+                return None
+        else:
+            logger.warning(f"the invalid input")
+            return None
+        
+        if name not in self.hosts:
+            logger.warning(f"the name:{name} doesn't exist in database")
+
+        for ip in self.hosts[name]['IPs']:
+            if ip.startswith(self.MULTI_GROUP_IP_STARTWITH):
+                return ip
+        
+        logger.warning(f"the host:{name}, not have multi group ip")
+        return 
 
     def get_host_mac(self, host_name=None, host_ip=None) -> str:
         # 檢查 host_name 是否有效
@@ -180,37 +208,54 @@ class Topology():
             return True
         return False
 
+    # def set_commodities_and_paths(self, data):
+    #     for commodity, links_context in data.items():
+    #         self.commodities_to_paths[commodity] = self.set_paths(links_context)
+
+    # def set_paths(self, links):
+    #     commodity = {}
+    #     print(f"links in set paths: {links}")
+    #     for link, bandwidth in links.items():
+    #         u, v = str_to_tuple(link)
+    #         if u not in commodity:
+    #             commodity[u] = [(v, bandwidth)]
+    #         else:
+    #             commodity[u].append((v, bandwidth))
+    #     return commodity
+    
+    # def get_paths(self, commodity) -> Dict[str, List]:
+    #     return self.commodities_to_paths[commodity]
+    
+    # def get_commodities_and_paths(self) -> Dict[str, Dict[str, List]]:
+    #     return self.commodities_to_paths
+
+    # def clear_all_commodities(self):
+    #     self.commodities_to_paths.clear()
+    
+    # def print_commodities_and_paths(self):
+    #     print("------ Commodities and Their Paths ------")
+    #     for commodity, paths in self.commodities_to_paths.items():
+    #         print(f"Commodity: {commodity}")
+    #         for u, v_list in paths.items():
+    #             v_str = ", ".join(v_list)  # 格式化相鄰節點為字符串
+    #             print(f"  Node {u} -> [{v_str}]")
+
     def set_commodities_and_paths(self, data):
-        for commodity, links_context in data.items():
-            self.commodities_to_paths[commodity] = self.set_paths(links_context)
+        for commodity, context in data.items():
+            paths = {}
+            for link, bw in context.items():
+                u, v = str_to_tuple(link)
+                paths[(u, v)] = bw
+            self.commodities_to_paths[commodity] = paths
+            self.commodities.append(commodity)
 
-    def set_paths(self, links):
-        commodity = {}
-        print(f"links in set paths: {links}")
-        for link, bandwidth in links.items():
-            u, v = str_to_tuple(link)
-            if u not in commodity:
-                commodity[u] = [(v, bandwidth)]
-            else:
-                commodity[u].append((v, bandwidth))
-        return commodity
-    
-    def get_paths(self, commodity) -> Dict[str, List]:
-        return self.commodities_to_paths[commodity]
-    
-    def get_commodities_and_paths(self) -> Dict[str, Dict[str, List]]:
-        return self.commodities_to_paths
+    def get_paths(self, commodity):
+        if commodity in self.commodities_to_paths:
+            return self.commodities_to_paths[commodity]
+        logger.warning(f"The commodity:{commodity} is not exist")
 
-    def clear_all_commodities(self):
-        self.commodities_to_paths.clear()
-    
-    def print_commodities_and_paths(self):
-        print("------ Commodities and Their Paths ------")
-        for commodity, paths in self.commodities_to_paths.items():
-            print(f"Commodity: {commodity}")
-            for u, v_list in paths.items():
-                v_str = ", ".join(v_list)  # 格式化相鄰節點為字符串
-                print(f"  Node {u} -> [{v_str}]")
+    def get_commodities(self):
+        return self.commodities
 
     def is_mac(self, s):
         return bool(re.match(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$", s)) 
