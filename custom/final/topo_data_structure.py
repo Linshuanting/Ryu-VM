@@ -208,39 +208,7 @@ class Topology():
             return True
         return False
 
-    # def set_commodities_and_paths(self, data):
-    #     for commodity, links_context in data.items():
-    #         self.commodities_to_paths[commodity] = self.set_paths(links_context)
-
-    # def set_paths(self, links):
-    #     commodity = {}
-    #     print(f"links in set paths: {links}")
-    #     for link, bandwidth in links.items():
-    #         u, v = str_to_tuple(link)
-    #         if u not in commodity:
-    #             commodity[u] = [(v, bandwidth)]
-    #         else:
-    #             commodity[u].append((v, bandwidth))
-    #     return commodity
-    
-    # def get_paths(self, commodity) -> Dict[str, List]:
-    #     return self.commodities_to_paths[commodity]
-    
-    # def get_commodities_and_paths(self) -> Dict[str, Dict[str, List]]:
-    #     return self.commodities_to_paths
-
-    # def clear_all_commodities(self):
-    #     self.commodities_to_paths.clear()
-    
-    # def print_commodities_and_paths(self):
-    #     print("------ Commodities and Their Paths ------")
-    #     for commodity, paths in self.commodities_to_paths.items():
-    #         print(f"Commodity: {commodity}")
-    #         for u, v_list in paths.items():
-    #             v_str = ", ".join(v_list)  # 格式化相鄰節點為字符串
-    #             print(f"  Node {u} -> [{v_str}]")
-
-    def set_commodities_and_paths(self, data):
+    def set_commodities_and_paths_old(self, data):
         for commodity, context in data.items():
             paths = {}
             for link, bw in context.items():
@@ -256,6 +224,28 @@ class Topology():
 
     def get_commodities(self):
         return self.commodities
+    
+    def set_commodities_and_paths(
+            self, 
+            data: Dict[str, List[Dict[str, str]]]):
+        for commodity, context in data.items():
+            paths = []
+            for tree in context:
+                single_tree = {}
+                for link, bw in tree.items():
+                    u, v = str_to_tuple(link)
+                    single_tree[(u, v)] = bw
+                paths.append(single_tree)
+            """
+                "commodity1": [
+                    {
+                        "3-h0": 18,
+                        "h2-5": 18
+                    }
+                ],
+            """
+            self.commodities_to_paths[commodity] = paths
+            self.commodities.append(commodity)
 
     def is_mac(self, s):
         return bool(re.match(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$", s)) 

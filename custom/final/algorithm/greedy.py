@@ -26,7 +26,7 @@ class myAlgorithm:
         Res = {}
 
         for k in K:
-            flow = {}
+            flow = []
             k_demand = k['demand']
             k_src = k['source']
             k_dest = k['destinations']
@@ -46,7 +46,8 @@ class myAlgorithm:
                     print(f"{k_name} in phase 1 build an unconnecting tree")
                     break
                 k_demand, path = self.decrease_bandwidth(k_src, k_dest, k_demand, tree, filtered_E)
-                self.add_path_to_result(path, flow)
+                # self.add_path_to_result(path, flow)
+                self.add_path_respectively_to_result(path, flow)
                 self.delete_redundant_edge(lower_bound, filtered_E, path)
 
             self.update_E(E, flow)
@@ -64,8 +65,8 @@ class myAlgorithm:
                     print(f"{k_name} in phase 2 build an unconnecting tree")
                     break
                 k_demand, path = self.decrease_bandwidth(k_src, k_dest, k_demand, tree, E)
-                self.add_path_to_result(path, flow)
-
+                # self.add_path_to_result(path, flow)
+                self.add_path_respectively_to_result(path, flow)
                 self.delete_redundant_edge(0, E, path)
             
             Res[k_name] = flow
@@ -88,6 +89,13 @@ class myAlgorithm:
                 res[(u, v)] += w
             else:
                 res[(u, v)] = w
+    
+    def add_path_respectively_to_result(
+            self, 
+            path:Dict[Tuple[str, str], float],
+            res:List[Dict[Tuple[str, str], float]]
+    ):
+        res.append(path)
 
     def build_spanning_tree(self, V:Set[str], E:Dict[Tuple[str, str], float], src:str) -> Dict[Tuple[str, str], float]:
         st = ST(V, E)
@@ -227,22 +235,23 @@ class myAlgorithm:
         
         print("------ print data finish ----------")
     
-    def print_result(self, result: Dict[str, Dict[Tuple[str, str], float]]):
+    def print_result(self, result: Dict[str, List[Dict[Tuple[str, str], float]]]):
 
         print(f"--- print result ---")
-
-        for name, res in result.items():
+        for name, lists in result.items():
             print(f"name: {name}")
-            for (u, v), w in res.items():
-                print(f"link: {u}-{v}, bandwidth:{w}")
-            print("-----------------")
+            for res in lists:
+                for (u, v), w in res.items():
+                    print(f"link: {u}-{v}, bandwidth:{w}")
+                print("-----------------")
 
-    def update_E(self, E:Dict[Tuple[str, str], float], path:Dict[Tuple[str, str], float]):
-        for (u, v), w in path.items():
-            E[(u, v)] = E[(u, v)] - w
+    def update_E(self, E:Dict[Tuple[str, str], float], paths:List[Dict[Tuple[str, str], float]]):
+        for path in paths:
+            for (u, v), w in path.items():
+                E[(u, v)] = E[(u, v)] - w
 
-            if E[(u, v)] <= 0:
-                del E[(u, v)]
+                if E[(u, v)] <= 0:
+                    del E[(u, v)]
             
     
     def delete_redundant_edge(self, lowerbound:float, E:Dict[Tuple[str, str], float], path:Dict[Tuple[str, str], float]):

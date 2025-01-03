@@ -24,6 +24,38 @@ def print_json_in_file(file_path):
 def print_json(data):
     print(json.dumps(data, indent=4, ensure_ascii=False))
 
+def print_dict(d, indent=0):
+    """
+    递归打印字典（支持嵌套字典、列表、元组）
+    :param d: 需要打印的字典
+    :param indent: 当前缩进层级
+    """
+    if not isinstance(d, dict):
+        print("错误：输入的不是字典！")
+        return
+
+    for key, value in d.items():
+        # 打印键
+        print(" " * indent + f"{key}: ", end="")
+
+        # 处理不同类型的值
+        if isinstance(value, dict):  # 如果值是字典，递归调用
+            print()  # 换行
+            pretty_print_dict(value, indent + 4)
+        elif isinstance(value, list):  # 处理列表
+            print("[")
+            for item in value:
+                if isinstance(item, dict):
+                    pretty_print_dict(item, indent + 4)
+                else:
+                    print(" " * (indent + 4) + str(item))
+            print(" " * indent + "]")
+        elif isinstance(value, tuple):  # 处理元组
+            print("(" + ", ".join(str(i) for i in value) + ")")
+        else:  # 其他基本类型
+            print(value)
+
+
 def tuple_key_to_str(data):
     new_dict = {}
     for k, v in data.items():

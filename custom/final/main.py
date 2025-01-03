@@ -110,8 +110,8 @@ if __name__ == "__main__":
         'commodities_and_paths': to_dict(res),
         'commodities_data': commodities
     }
-    # print(type(packet))
-    # print(packet)
+    print(type(packet))
+    print(packet)
     print(client.post_json_data(packet))
 
 

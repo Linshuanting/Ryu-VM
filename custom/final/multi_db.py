@@ -1,95 +1,131 @@
 import json
+import ipaddress
 from typing import List, Dict, Optional
+
 
 class MultiGroupDB:
     def __init__(self):
         # 初始化数据库
-        self.group_to_hosts: Dict[str, List[str]] = {}  # 存储 multi group 对应的 hosts
-        self.commodity_to_ip: Dict[str, str] = {}  # 存储 commodity 对应的 multi IP
-        self.ip_counter = 1  # 用于动态分配 IPv6 multi group 的计数器
-        self.base_ip = "ff38::"  # 基础 IPv6 多播地址
+        self.commodity_to_group: Dict[str, int] = {}  # commodity 对应的 group id
+        self.groups: Dict[int, MultiGroup] = {}  # group_id 对应的组
+        self.group_id_counter = 1
 
-    def generate_new_ip(self) -> str:
+    def _get_group_by_commodity(self, commodity: str) -> Optional["MultiGroup"]:
         """
-        动态生成新的 multi IP 地址
+        根据 commodity 获取对应的组，如果不存在，抛出异常
         """
-        new_ip = f"{self.base_ip}{self.ip_counter}"
-        self.ip_counter += 1
-        return new_ip
+        if commodity not in self.commodity_to_group:
+            raise ValueError(f"Commodity {commodity} 未分配组！")
+        group_id = self.commodity_to_group[commodity]
+        return self.groups[group_id]
 
-    def add_multi_group(self, group_ip: str):
-        if group_ip not in self.group_to_hosts:
-            self.group_to_hosts[group_ip] = []
-            print(f"multi group {group_ip} added.")
-        else:
-            print(f"multi group {group_ip} already exists.")
-
-    def remove_multi_group(self, group_ip: str):
-        if group_ip in self.group_to_hosts:
-            del self.group_to_hosts[group_ip]
-            print(f"multi group {group_ip} removed.")
-        else:
-            print(f"multi group {group_ip} does not exist.")
-
-    def add_host_to_group(self, group_ip: str, host: str):
-        if group_ip in self.group_to_hosts:
-            if host not in self.group_to_hosts[group_ip]:
-                self.group_to_hosts[group_ip].append(host)
-                print(f"Host {host} added to group {group_ip}.")
-            else:
-                print(f"Host {host} is already in group {group_ip}.")
-        else:
-            print(f"multi group {group_ip} does not exist.")
-
-    def assign_commodity_to_dynamic_ip(self, commodity: str) -> str:
+    def create_group_for_commodity(self, commodity: str) -> int:
         """
-        动态为 commodity 分配一个新的 multi IP，并自动创建对应的组
+        为 commodity 创建一个新的多播组
         """
-        if commodity in self.commodity_to_ip:
-            print(f"Commodity {commodity} already assigned to IP {self.commodity_to_ip[commodity]}.")
-            return self.commodity_to_ip[commodity]
+        if commodity in self.commodity_to_group:
+            print(f"Commodity {commodity} 已分配到组 {self.commodity_to_group[commodity]}")
+            return self.commodity_to_group[commodity]
 
-        # 生成新 IP 并创建组
-        new_ip = self.generate_new_ip()
-        self.add_multi_group(new_ip)
+        # 分配新的 Multicast Group
+        group_id = self.group_id_counter
+        group_prefix = f"ff38:{group_id:04x}::"  # e.g., `ff38::0001`
 
-        # 绑定 commodity 和 IP
-        self.commodity_to_ip[commodity] = new_ip
-        print(f"Commodity {commodity} assigned to new multi IP {new_ip}.")
-        return new_ip
+        # 确保主机位清零，并使用 /112 掩码
+        network_prefix = ipaddress.IPv6Network(f"{group_prefix}/112", strict=False)
 
-    def get_ip_for_commodity(self, commodity: str) -> Optional[str]:
+        group = MultiGroup(group_id, network_prefix)
+
+        self.groups[group_id] = group
+        self.commodity_to_group[commodity] = group_id
+        print(f"为 commodity {commodity} 创建组 {group_id}, 前缀 {group_prefix}/112")
+
+        self.group_id_counter += 1
+        return group_id
+
+    def add_host_to_group(self, commodity: str, host: str):
         """
-        查询指定 commodity 分配的 multi IP
+        为 commodity 对应的组添加主机
         """
-        return self.commodity_to_ip.get(commodity, None)
+        group = self._get_group_by_commodity(commodity)
+        group.add_host(host)
 
-    def save_to_file(self, filename: str):
-        data = {
-            "group_to_hosts": self.group_to_hosts,
-            "commodity_to_ip": self.commodity_to_ip,
-            "ip_counter": self.ip_counter
-        }
-        with open(filename, 'w') as f:
-            json.dump(data, f, indent=4)
-        print(f"Database saved to {filename}.")
+    def get_prefix_for_commodity(self, commodity: str) -> ipaddress.IPv6Network:
+        """
+        获取 commodity 对应组的前缀 IP
+        """
+        group = self._get_group_by_commodity(commodity)
+        return group.get_prefix()
 
-    def load_from_file(self, filename: str):
-        try:
-            with open(filename, 'r') as f:
-                data = json.load(f)
-                self.group_to_hosts = data.get("group_to_hosts", {})
-                self.commodity_to_ip = data.get("commodity_to_ip", {})
-                self.ip_counter = data.get("ip_counter", 1)
-            print(f"Database loaded from {filename}.")
-        except FileNotFoundError:
-            print(f"File {filename} not found. Starting with an empty database.")
+    def assign_internal_ip(self, commodity: str) -> str:
+        """
+        为指定 commodity 的组分配内部 IP
+        """
+        group = self._get_group_by_commodity(commodity)
+        return group.assign_internal_ip()
 
-    def print_db(self):
-        print("Multi Group Database:")
-        print("Group to Hosts:")
-        for group, hosts in self.group_to_hosts.items():
-            print(f"  Group {group}: {hosts}")
-        print("Commodity to IP:")
-        for commodity, ip in self.commodity_to_ip.items():
-            print(f"  Commodity {commodity}: {ip}")
+    def get_all_internal_ips(self, commodity: str) -> List[ipaddress.IPv6Address]:
+        """
+        获取指定 commodity 的所有内部 IP
+        """
+        group = self._get_group_by_commodity(commodity)
+        return group.get_all_internal_ips()
+
+    def print_all_groups(self):
+        """
+        打印所有组的信息
+        """
+        for group_id, group in self.groups.items():
+            print(f"组 {group_id} (前缀: {group.base_ipv6_prefix}):")
+            print(f"  分配的内部 IP: {group.get_all_internal_ips()}")
+            print(f"  分配的主机: {group.get_all_hosts()}")
+
+
+class MultiGroup:
+    def __init__(self, group_id: int, base_ipv6_prefix: ipaddress.IPv6Network):
+        self.group_id = group_id
+        self.base_ipv6_prefix = base_ipv6_prefix  # e.g., ff38::0001/112
+        self.assigned_ips: set[ipaddress.IPv6Address] = set()
+        self.counter = 1  # 用于生成内部 IP 的计数器
+        self.hosts: List[str] = []  # 存储组内的主机
+
+    def assign_internal_ip(self) -> str:
+        """
+        为组内分配唯一的内部 IP（最后16位）
+        """
+        if self.counter > 0xFFFF:
+            raise ValueError("No more internal IPs available in this group!")
+
+        # 使用 ipaddress 模块生成新 IP
+        new_ip = self.base_ipv6_prefix.network_address + self.counter
+        if new_ip in self.assigned_ips:
+            raise ValueError(f"Internal IP {new_ip} conflict in group!")
+
+        self.assigned_ips.add(new_ip)
+        self.counter += 1
+        return str(new_ip)
+
+    def get_all_internal_ips(self) -> List[ipaddress.IPv6Address]:
+        """
+        获取组内所有已分配的内部 IP
+        """
+        return list(self.assigned_ips)
+
+    def get_prefix(self) -> ipaddress.IPv6Network:
+        """
+        获取组的前缀
+        """
+        return self.base_ipv6_prefix
+
+    def add_host(self, host: str):
+        """
+        为组添加主机
+        """
+        if host not in self.hosts:
+            self.hosts.append(host)
+
+    def get_all_hosts(self) -> List[str]:
+        """
+        获取组内的所有主机
+        """
+        return self.hosts

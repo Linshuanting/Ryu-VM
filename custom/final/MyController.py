@@ -3,6 +3,7 @@ from typing import List, Dict, Tuple, Set
 import selection_method_parser as sm_parser
 from ryu.lib.packet import ethernet, ether_types
 from multi_db import MultiGroupDB
+from utils import print_dict
 
 class MyController(SimpleSwitch15):
 
@@ -26,51 +27,50 @@ class MyController(SimpleSwitch15):
 
         commodities = self.topo.get_commodities()
         for commodity in commodities:
-            print(f"-- {commodity} --")
-            switch_to_port_bandwidth = {}
-            switch_to_inport = {}
-            start_host = None
-            nodes = set()
-            
             paths = self.topo.get_paths(commodity)
-            for (u, v), bw in paths.items():
-                port_u, port_v = self.topo.get_link(u, v)
+            print(f"-- {commodity} --")
+            for tree in paths:
+                switch_to_port_bandwidth = {}
+                switch_to_inport = {}
+                nodes = set()
+                print(f"---- tree ----")
                 
-                # 判斷每個 switch 要流出的 port，以及其權重
-                if u not in switch_to_port_bandwidth:
-                    switch_to_port_bandwidth[u] = [(port_u, bw)]
-                else:
-                    switch_to_port_bandwidth[u].append((port_u, bw))
-                # 判斷每個 switch 流入口，來當作 match 條件
-                if v not in switch_to_inport:
-                    switch_to_inport[v] = [port_v]
-                else:
-                    switch_to_inport[v].append(port_v)
-                # 判斷從哪個 host 開始，並之後找出其多播群組 ip，用來當作 match 條件
-                if u.startswith('h'):
-                    start_host = u
+                for (u, v), bw in tree.items():
+                    port_u, port_v = self.topo.get_link(u, v)
+                    
+                    # 判斷每個 switch 要流出的 port，以及其權重
+                    if u not in switch_to_port_bandwidth:
+                        switch_to_port_bandwidth[u] = [(port_u, bw)]
+                    else:
+                        switch_to_port_bandwidth[u].append((port_u, bw))
+                    # 判斷每個 switch 流入口，來當作 match 條件
+                    if v not in switch_to_inport:
+                        switch_to_inport[v] = [port_v]
+                    else:
+                        switch_to_inport[v].append(port_v)
 
-                if not u.startswith('h'):
-                    nodes.add(u)
-                if not v.startswith('h'):
-                    nodes.add(v)
+                    if not u.startswith('h'):
+                        nodes.add(u)
+                    if not v.startswith('h'):
+                        nodes.add(v)
 
-            multi_ip = self.multi_db.get_ip_for_commodity(commodity)
-            if multi_ip is None:
-                # 測試用 ip
-                multi_ip = "ff38::8888"
-
-            for dp_id in nodes:
-                dp = self.topo.get_datapath(dp_id)
-                group_id = self.group_id_counter
-                port_bw_list = switch_to_port_bandwidth[dp_id]
-                # 處理每個 switch 的 output 流向
-                self.send_group_selection_method(dp, port_bw_list, group_id)
-                # 處理每個 switch 的 inport 判斷
-                for inport in switch_to_inport[dp_id]:
-                    self.send_flowMod_to_switch(dp, inport, multi_ip, group_id)
-                
-                self.group_id_counter+=1
+                multi_ip = self.multi_db.assign_internal_ip(commodity)
+                if multi_ip is None:
+                    # 測試用 ip
+                    multi_ip = "ff38::8888"
+                print(f"Multi IP:{multi_ip}")
+                print_dict(tree)
+                for dp_id in nodes:
+                    dp = self.topo.get_datapath(dp_id)
+                    group_id = self.group_id_counter
+                    port_bw_list = switch_to_port_bandwidth[dp_id]
+                    # 處理每個 switch 的 output 流向
+                    self.send_group_selection_method(dp, port_bw_list, group_id)
+                    # 處理每個 switch 的 inport 判斷
+                    for inport in switch_to_inport[dp_id]:
+                        self.send_flowMod_to_switch(dp, inport, multi_ip, group_id)
+                    
+                    self.group_id_counter+=1
 
     def send_flowMod_to_switch(self, datapath, inport, multi_ip, group_id):
         
@@ -127,7 +127,8 @@ class MyController(SimpleSwitch15):
 
     def assign_commodities_hosts_to_multi_ip(self, commodities_data):
         for data in commodities_data:
-            group_ip = self.multi_db.assign_commodity_to_dynamic_ip(data['name'])
-            self.multi_db.add_host_to_group(group_ip, data['source'])
+            commodity = data['name']
+            self.multi_db.create_group_for_commodity(commodity)
+            self.multi_db.add_host_to_group(commodity, data['source'])
             for dst in data['destinations']:
-                self.multi_db.add_host_to_group(group_ip, dst)
+                self.multi_db.add_host_to_group(commodity, dst)
