@@ -3,10 +3,13 @@ import re
 from utils import str_to_tuple
 
 class TopologyParser:
+
+    SINGLE_IP_STARTWITH = '2001'
+    
     def __init__(self, data = None):
         self.nodes = []
         self.links = []
-        self.data = data
+        self.data: dict = data
 
     def parse_data(self):
         """
@@ -38,6 +41,27 @@ class TopologyParser:
             links_list.append([u, v])
 
         return links_list
+    
+    def get_ip_from_host(self, host):
+
+        for ip in self.data[host]['IPs']:
+            if ip.startswith(self.SINGLE_IP_STARTWITH):
+                return ip
+        
+        print(f"the host:{host}, not have single ipv6 startswith {self.SINGLE_IP_STARTWITH}")
+        return None
+    
+    def get_single_ip_from_all_hosts(self) -> dict:
+
+        hosts = {}
+        for host, data in self.data.items():
+            ips = data['IPs']
+            for ip in ips:
+                if ip.startswith(self.SINGLE_IP_STARTWITH):
+                    hosts[host] = ip
+        
+        return hosts
+
 
     def set_data(self, data):
         self.data = data

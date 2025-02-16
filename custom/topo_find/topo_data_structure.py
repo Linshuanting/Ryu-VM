@@ -61,6 +61,28 @@ class Topology():
         u, v = self.turn_to_key(u), self.turn_to_key(v)
         return self.links[(u, v)]
     
+    def del_link(self, u, v=None):
+        """刪除 self.links 中的鏈路 (u, v) 或 (u, *)"""
+        if self.get_hostName_from_mac(u) is None:
+            return
+        u = self.turn_to_key(u)  # 轉換 key
+        if v is not None:
+            v = self.turn_to_key(v)  # 轉換 key
+            # 刪除指定 (u, v) 鏈路
+            if (u, v) in self.links:
+                del self.links[(u, v)]
+                logger.info(f"刪除鏈路: ({u}, {v})")
+            if (v, u) in self.links:  # 確保雙向刪除
+                del self.links[(v, u)]
+                logger.info(f"刪除鏈路: ({v}, {u})")
+        else:
+            # 刪除所有與 u 相關的鏈路
+            keys_to_delete = [key for key in self.links if u in key]
+            for key in keys_to_delete:
+                del self.links[key]
+                logger.info(f"刪除鏈路: {key}")
+
+    
     def print_links(self):
         print("------ Current Links ------")
         for (u, v), (port_u, port_v) in self.links.items():
@@ -82,6 +104,13 @@ class Topology():
         }
         self.hosts[name] = data
         return
+    
+    def del_host(self, host_mac):
+        logger.info(f'Del host: {host_mac}, hostName:{self.get_hostName_from_mac(host_mac)}')
+        name = self.get_hostName_from_mac(host_mac)
+        if name in self.hosts:
+            del self.hosts[name]
+            self.del_hostName(host_mac)
     
     def get_connecting_host_switch_data(self, host_name=None, host_mac=None) -> Tuple[int, int]:
         if host_name is not None and host_name in self.hosts:
@@ -170,7 +199,7 @@ class Topology():
             logger.debug(f"Already set the mac:{mac} in hostName database")
             return self.mac_to_host[mac]
         
-        self.mac_to_host[mac] = f"h{self.host_counter}"
+        # self.mac_to_host[mac] = f"h{self.host_counter}"
         self.host_counter+=1
 
         # 提取 MAC 地址的最後兩個字節
@@ -179,6 +208,12 @@ class Topology():
         self.mac_to_host[mac] = f"h{host_suffix}"
 
         return self.mac_to_host[mac]
+    
+    def del_hostName(self, mac):
+        if mac in self.mac_to_host:
+            del self.mac_to_host[mac]
+        else:
+            logger.debug(f'the hostName and host is not exist, can not delete')
     
     def contain_IP(self, IP = None) -> bool:
         for name, host_info in self.hosts.items():
@@ -220,6 +255,9 @@ class Topology():
         if id in self.datapath:
             return self.datapath[id]
         logger.warning(f"the sw_id:{id} is not exist")
+    
+    def get_datapaths(self) -> Dict:
+        return self.datapath
     
     def print_datapath(self):
         for id, dp in self.datapath.items():

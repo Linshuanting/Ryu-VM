@@ -6,6 +6,7 @@ from algorithm.greedy import myAlgorithm  # 替换为你的主代码文件名
 from topo_data import Topology
 from rest_client import RestAPIClient
 from topo_parser import TopologyParser
+from mininet_connect import MininetSSHManager
 from utils import print_json, to_dict
 
 def start_controller():
@@ -39,6 +40,8 @@ def get_bandwidth(links):
         capacity = 0
         if a.startswith("h") or b.startswith("h"):
             capacity = 50
+        elif a.startswith("s999") or b.startswith("s999"):
+            capacity = 0
         else:
             capacity = 20
         capacities[f"{a}-{b}"] = capacities.get(f"{a}-{b}", capacity)
@@ -61,7 +64,7 @@ def get_commodity(nodes, num):
         dst_cnt = random.randint(1, 3)
         chosen_dst = random.sample(possible_dsts, min(dst_cnt, len(possible_dsts)))
 
-        demand_val = random.randint(5, 20)
+        demand_val = random.randint(5, 30)
 
         commodity_data = {
             "name": commodity_name,
@@ -81,6 +84,15 @@ def print_commodities(commodities):
     for data in commodities:
         print(json.dumps(data, indent=2))
 
+def connect_to_host_and_send_cmd(mininet:MininetSSHManager, commodities:dict):
+
+    for data in commodities:
+        src = data['source']
+        dsts = data['destinations']
+        
+        mininet.run_source_cmd(src)
+        mininet.run_destinations_cmd(dsts)
+
 url = "http://127.0.0.1:8080"
 
 if __name__ == "__main__":
@@ -99,6 +111,9 @@ if __name__ == "__main__":
     links = parser.get_links()
     capacities = get_bandwidth(links)
     commodities = get_commodity(nodes, 2)
+
+    # mininet = MininetSSHManager(parser.get_single_ip_from_all_hosts())
+    # connect_to_host_and_send_cmd(mininet, commodities)
 
     print(nodes)
     print(links)

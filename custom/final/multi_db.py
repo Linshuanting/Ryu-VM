@@ -29,16 +29,13 @@ class MultiGroupDB:
 
         # 分配新的 Multicast Group
         group_id = self.group_id_counter
-        group_prefix = f"ff38:{group_id:04x}::"  # e.g., `ff38::0001`
+        group_ip = f"ff38::{group_id:04x}"  # e.g. ff38:1::
 
-        # 确保主机位清零，并使用 /112 掩码
-        network_prefix = ipaddress.IPv6Network(f"{group_prefix}/112", strict=False)
-
-        group = MultiGroup(group_id, network_prefix)
+        group = MultiGroup(group_id, group_ip)
 
         self.groups[group_id] = group
         self.commodity_to_group[commodity] = group_id
-        print(f"为 commodity {commodity} 创建组 {group_id}, 前缀 {group_prefix}/112")
+        print(f"为 commodity {commodity} 创建组 {group_id}, Group IP:{group_ip}")
 
         self.group_id_counter += 1
         return group_id
@@ -49,73 +46,46 @@ class MultiGroupDB:
         """
         group = self._get_group_by_commodity(commodity)
         group.add_host(host)
-
-    def get_prefix_for_commodity(self, commodity: str) -> ipaddress.IPv6Network:
-        """
-        获取 commodity 对应组的前缀 IP
-        """
+    
+    def add_host_to_group(self, commodity: str, 
+                          src_host:str=None, 
+                          dst_host:str=None,
+                          dst_hosts:list=None):
         group = self._get_group_by_commodity(commodity)
-        return group.get_prefix()
-
-    def assign_internal_ip(self, commodity: str) -> str:
-        """
-        为指定 commodity 的组分配内部 IP
-        """
+        if src_host is not None:
+            group.add_src(src_host)
+        if dst_host is not None:
+            group.add_dst(dst_host=dst_host)
+        if dst_hosts is not None:
+            group.add_dst(dst_hosts=dst_hosts)
+    
+    def get_src_host_from_commodity(self, commodity: str):
         group = self._get_group_by_commodity(commodity)
-        return group.assign_internal_ip()
-
-    def get_all_internal_ips(self, commodity: str) -> List[ipaddress.IPv6Address]:
-        """
-        获取指定 commodity 的所有内部 IP
-        """
+        return group.get_src_host()
+    
+    def get_dst_hosts_from_commodity(self, commodity: str):
         group = self._get_group_by_commodity(commodity)
-        return group.get_all_internal_ips()
+        return group.get_dst_hosts()
 
     def print_all_groups(self):
         """
         打印所有组的信息
         """
         for group_id, group in self.groups.items():
-            print(f"组 {group_id} (前缀: {group.base_ipv6_prefix}):")
-            print(f"  分配的内部 IP: {group.get_all_internal_ips()}")
+            print(f"组 {group_id} (IP: {group.group_ipv6}):")
             print(f"  分配的主机: {group.get_all_hosts()}")
 
+    def get_commodity_ip(self, commodity:str):
+        group_id = self.commodity_to_group[commodity]
+        return f"ff38::{group_id:04x}"
 
 class MultiGroup:
-    def __init__(self, group_id: int, base_ipv6_prefix: ipaddress.IPv6Network):
+    def __init__(self, group_id: int, group_ip: ipaddress.IPv6Network):
         self.group_id = group_id
-        self.base_ipv6_prefix = base_ipv6_prefix  # e.g., ff38::0001/112
-        self.assigned_ips: set[ipaddress.IPv6Address] = set()
-        self.counter = 1  # 用于生成内部 IP 的计数器
+        self.group_ipv6 = group_ip  # e.g., ff38::0001
         self.hosts: List[str] = []  # 存储组内的主机
-
-    def assign_internal_ip(self) -> str:
-        """
-        为组内分配唯一的内部 IP（最后16位）
-        """
-        if self.counter > 0xFFFF:
-            raise ValueError("No more internal IPs available in this group!")
-
-        # 使用 ipaddress 模块生成新 IP
-        new_ip = self.base_ipv6_prefix.network_address + self.counter
-        if new_ip in self.assigned_ips:
-            raise ValueError(f"Internal IP {new_ip} conflict in group!")
-
-        self.assigned_ips.add(new_ip)
-        self.counter += 1
-        return str(new_ip)
-
-    def get_all_internal_ips(self) -> List[ipaddress.IPv6Address]:
-        """
-        获取组内所有已分配的内部 IP
-        """
-        return list(self.assigned_ips)
-
-    def get_prefix(self) -> ipaddress.IPv6Network:
-        """
-        获取组的前缀
-        """
-        return self.base_ipv6_prefix
+        self.src_host = None
+        self.dst_hosts = []
 
     def add_host(self, host: str):
         """
@@ -123,9 +93,32 @@ class MultiGroup:
         """
         if host not in self.hosts:
             self.hosts.append(host)
+    
+    def add_src(self, src_host: str):
+        if self.src_host is None:
+            self.src_host = src_host
+            self.hosts.append(src_host)
+        else:
+            print(f"the src host:{self.src_host} is exist in Group ID:{self.group_id}")
+
+    def add_dst(self, dst_host:str=None, dst_hosts:list=None):
+        if dst_host is not None:
+            self.dst_hosts.append(dst_host)
+            self.hosts.append(dst_host)
+        elif dst_hosts is not None:
+            self.dst_hosts.extend(dst_hosts)
+            self.hosts.extend(dst_hosts)
+        else:
+            print(f"the dst host is None in Group ID:{self.group_id}")
 
     def get_all_hosts(self) -> List[str]:
         """
         获取组内的所有主机
         """
         return self.hosts
+    
+    def get_src_host(self):
+        return self.src_host
+    
+    def get_dst_hosts(self):
+        return self.dst_hosts
