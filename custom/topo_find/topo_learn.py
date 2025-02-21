@@ -13,12 +13,14 @@ from ryu.exception import RyuException
 from topo_data_structure import Topology
 from ryu.app.wsgi import WSGIApplication
 import threading
+import random
 
 
 
 from ryu.topology import event
 # Below is the library used for topo discovery
 from ryu.topology.api import get_switch, get_link, get_host
+from Dijkstra import NetworkGraph
 import copy, struct
 from ryu.lib.dpid import dpid_to_str, str_to_dpid
 
@@ -29,8 +31,10 @@ class SimpleSwitch15(app_manager.RyuApp):
     def __init__(self, *args, **kwargs):
         super(SimpleSwitch15, self).__init__(*args, **kwargs)
         self.topo = Topology()
+        self.networkGraph=NetworkGraph()
         self.monitor_thread = hub.spawn(self._monitor)
         # self.lldp_thread = hub.spawn(self.lldp_sender)
+        # self.test_moniter_thread = hub.spawn(self.test_moniter)
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
@@ -98,6 +102,60 @@ class SimpleSwitch15(app_manager.RyuApp):
         datapath.send_msg(out)
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
+    def _unknown_packet_in_handler(self, ev):
+        
+        msg = ev.msg
+        datapath = msg.datapath
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+        in_port = msg.match['in_port']
+
+        pkt = packet.Packet(msg.data)
+        eth = pkt.get_protocol(ethernet.ethernet)
+
+        if eth.ethertype == ether_types.ETH_TYPE_LLDP:
+            return
+        
+        # 取得 IPv6 封包
+        ipv6_pkt = pkt.get_protocol(ipv6.ipv6)
+        if ipv6_pkt is None:
+            return  # 如果不是 IPv6，直接忽略
+        
+        icmpv6_pkt = pkt.get_protocol(icmpv6.icmpv6)
+        if icmpv6_pkt is not None:
+            # 如果是 NDP 封包（135, 136, 133, 134, 137），則忽略
+            if icmpv6_pkt.type_ in [135, 136, 133, 134, 137]:
+                return  # 忽略 NDP 封包
+            if icmpv6_pkt.type_ is icmpv6.MLDV2_LISTENER_REPORT:
+                return  # 忽略 MLD 封包 
+        
+        src_ipv6 = ipv6_pkt.src
+        dst_ipv6 = ipv6_pkt.dst
+        
+        if dst_ipv6 == "ff02::fb":
+            self.logger.info(f"收到 mDNS 封包: SRC={src_ipv6}, DST={dst_ipv6}")
+            return
+
+        print(f"取得 IPv6 封包: SRC={src_ipv6}, DST={dst_ipv6}")
+        
+        src_name = self.topo.get_hostName_from_ip(src_ipv6)[0]
+        dst_name = self.topo.get_hostName_from_ip(dst_ipv6)[0]
+
+        if src_name is None or dst_name is None:
+            self.logger.info(f"無效的 src: {src_name}, dst: {dst_name}")
+            return
+        
+        self.logger.info(f'src name: {src_name}, dst name: {dst_name}')
+
+        path = self.write_path_to_switch(src_name, dst_name)
+        
+        next_node = self.get_next_node(path, datapath.id)
+        port_u, port_v = self.topo.get_link(datapath.id, next_node)
+
+        self.send_pkt_msg(datapath=datapath, port=port_u, data=msg.data)
+
+
+    @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def _lldp_packet_in_handler(self, ev):
         
         msg = ev.msg
@@ -111,7 +169,7 @@ class SimpleSwitch15(app_manager.RyuApp):
 
         print(f'***** Get the lldp packet in switch {dst_dpid}, port:{dst_port_no} from switch {src_dpid}, port:{src_port_no} ')
 
-        self.topo.set_link(src_dpid, dst_dpid, src_port_no, dst_port_no)
+        self.add_link_to_database(src_dpid, dst_dpid, src_port_no, dst_port_no)
 
         print(f"------ switch {dst_dpid} -----------")
         self.topo.print_links()
@@ -137,7 +195,7 @@ class SimpleSwitch15(app_manager.RyuApp):
                 # self.topo.set_port_in_switch(dp.id, p.port_no)
                 self.topo.set_sw_mac_to_context(p.hw_addr, dp.id, p.port_no)
                 self.topo.set_datapath(dp, dp.id)
-                self.topo.del_link(p.hw_addr)
+                self.del_link_to_database(p.hw_addr)
                 self.topo.del_host(p.hw_addr)
                 self.send_lldp_out(dp, p.port_no)
             else:
@@ -194,8 +252,8 @@ class SimpleSwitch15(app_manager.RyuApp):
         print(f'                         , the tar_ip:{data["target_ip"]} ')
 
         self.topo.set_host(data['src_mac'], data['target_ip'], dp.id, in_port)
-        self.topo.set_link(data['src_mac'], dp.id, 0, in_port)
-        self.topo.set_link(dp.id, data['src_mac'], in_port, 0)
+        self.add_link_to_database(data['src_mac'], dp.id, 0, in_port)
+        self.add_link_to_database(dp.id, data['src_mac'], in_port, 0)
 
     def handle_ndp_ns(self, dp, in_port, data):
 
@@ -206,8 +264,8 @@ class SimpleSwitch15(app_manager.RyuApp):
         print(f'** This is NDP NS packet, the src_mac:{data["src_mac"]}, the src_ip:{data["src_ip"]}')
         
         self.topo.set_host(data['src_mac'], data['src_ip'], dp.id, in_port)
-        self.topo.set_link(data['src_mac'], dp.id, 0, in_port)
-        self.topo.set_link(dp.id, data['src_mac'], in_port, 0)
+        self.add_link_to_database(data['src_mac'], dp.id, 0, in_port)
+        self.add_link_to_database(dp.id, data['src_mac'], in_port, 0)
         self.send_ndp_na_out(dp, in_port, data)
 
     def send_ndp_na_out(self, datapath, port, data):
@@ -235,8 +293,8 @@ class SimpleSwitch15(app_manager.RyuApp):
         print(f'** This is NDP RS packet, the src_mac:{data["src_mac"]}, the src_ip:{data["src_ip"]}')
         
         self.topo.set_host(data['src_mac'], data['src_ip'], dp.id, in_port)
-        self.topo.set_link(data['src_mac'], dp.id, 0, in_port)
-        self.topo.set_link(dp.id, data['src_mac'], in_port, 0)
+        self.add_link_to_database(data['src_mac'], dp.id, 0, in_port)
+        self.add_link_to_database(dp.id, data['src_mac'], in_port, 0)
 
     def handle_mld_report(self, dp, in_port, data):
 
@@ -250,9 +308,9 @@ class SimpleSwitch15(app_manager.RyuApp):
         print(f'** This is MLD packet, the src_mac:{data["src_mac"]}, the src_ip:{data["src_ip"]}')
         
         self.topo.set_host(data['src_mac'], data['src_ip'], dp.id, in_port)
-        self.topo.set_link(data['src_mac'], dp.id, 0, in_port)
-        self.topo.set_link(dp.id, data['src_mac'], in_port, 0)
-    
+        self.add_link_to_database(data['src_mac'], dp.id, 0, in_port)
+        self.add_link_to_database(dp.id, data['src_mac'], in_port, 0)
+
     def _monitor(self):
         """ 每 2 秒查詢一次 switch 的 port 統計資訊 """
         while True:
@@ -269,7 +327,25 @@ class SimpleSwitch15(app_manager.RyuApp):
             for dp_id, dp in self.topo.get_datapaths().items():
                 for port_no, port in dp.ports.items():
                     self.send_lldp_out(dp, port_no)
-            
+    
+    def add_link_to_database(self, u, v, u_port_no, v_port_no):
+        self.topo.set_link(u, v, u_port_no, v_port_no)
+        if self.topo.is_mac(u):
+            u = self.topo.get_hostName_from_mac(u)
+        if self.topo.is_mac(v):
+            v = self.topo.get_hostName_from_mac(v)
+        self.networkGraph.add_link(u, v)
+    
+    def del_link_to_database(self, u, v=None):
+        if self.topo.is_mac(u):
+            u = self.topo.get_hostName_from_mac(u)
+        if self.topo.is_mac(v):
+            v = self.topo.get_hostName_from_mac(v)
+        self.topo.del_link(u, v)
+        if v is not None:
+            self.networkGraph.del_link(u, v)
+        else:
+            self.networkGraph.del_node(u)
     
     def send_port_request(self):
         def delayed_execution():
@@ -284,7 +360,82 @@ class SimpleSwitch15(app_manager.RyuApp):
                 datapath.send_msg(msg)
 
         # 啟動一個計時器，0 秒後執行 delayed_execution
-        threading.Timer(3, delayed_execution).start()
+        threading.Timer(0, delayed_execution).start()
+    
+    def test_moniter(self):
+
+        hub.sleep(5)
+        print(f'==== Start test src to dst shortest path =====')
+        self.set_path_to_network()
+        # src, dst = self.get_random_src_dst(self.topo.get_all_host_single_ipv6())
+        src, dst = 'h1', 'h2'
+        self.write_path_to_switch(src, dst)
+        src, dst = 'h2', 'h1'
+        self.write_path_to_switch(src, dst)
+    
+    def get_random_src_dst(self, hosts_dict):
+        
+        if len(hosts_dict) < 2:
+            raise ValueError("主機數量不足，無法選擇 src 和 dst")
+        src, dst = random.sample(list(hosts_dict.keys()), 2)
+
+        return src, dst
+
+    def set_path_to_network(self):
+        
+        for (u, v) in self.topo.get_links().keys():
+            self.networkGraph.add_link(u, v, 1)
+        
+    def get_shortest_path(self, src, dst):
+
+        path, length = self.networkGraph.dijkstra(src, dst)
+        print(f'** Get Shortest Path: {path}')
+        print(f'** Cost: {length}')
+        return path
+
+    def get_next_node(self, path, node):
+        return self.networkGraph.get_next_hop(path)[node]
+    
+    def write_path_to_switch(self, src, dst):
+        path = self.get_shortest_path(src, dst)
+        next_hop = self.networkGraph.get_next_hop(path)
+        now = next_hop[src]
+
+        start_ipv6 = self.topo.get_host_single_ipv6(src)
+        dest_ipv6 = self.topo.get_host_single_ipv6(dst)
+
+        print(f'  start src:{src}, start_ip: {start_ipv6}')
+        print(f'        dst:{dst}, dst_ip: {dest_ipv6}')
+
+        print(f'  Start writing rule to switch  ')
+        for sw in path[1:-1]:
+            next = next_hop[sw]
+
+            port_u, port_v = self.topo.get_link(sw, next)
+            dp = self.topo.get_datapath(sw)
+            print(f'  datapaths: {self.topo.get_datapaths()}, now:{sw}')
+            print(f'  datapath: {dp}')
+
+            parser = dp.ofproto_parser
+            match_ipv6 = parser.OFPMatch(
+                eth_type=ether_types.ETH_TYPE_IPV6,
+                ipv6_src=start_ipv6,
+                ipv6_dst=dest_ipv6
+            )
+
+            match_icmpv6 = parser.OFPMatch(
+                eth_type=ether_types.ETH_TYPE_IPV6,
+                ip_proto=58,  # ICMPv6
+                ipv6_src=start_ipv6,
+                ipv6_dst=dest_ipv6
+            )
+
+            actions = [parser.OFPActionOutput(port_u)]
+            print(f'    Writing rule in switch: {dp.id}')
+            self.add_flow(dp, 10, match_ipv6, actions)
+            # self.add_flow(dp, 10, match_icmpv6, actions)
+        
+        return path
 
 
 

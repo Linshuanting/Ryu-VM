@@ -7,16 +7,16 @@ from ryu.ofproto import inet
 from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet, ether_types
 from ryu.lib.packet import lldp
-from ryu.lib.packet import ipv6, icmpv6
+from ryu.lib.packet import ipv6, icmpv6, tcp
 from ryu.lib import hub
 from ryu.exception import RyuException
-from topo_data_structure import Topology
+from data_structure.topo_data_structure import Topology
 from ryu.app.wsgi import WSGIApplication
 import threading
 
 
-from Dijkstra import NetworkGraph
-from packet import Icmpv6Packet, NDPPacket, LLDPPacket
+from algorithm.Dijkstra import NetworkGraph
+from data_structure.packet import Icmpv6Packet, NDPPacket, LLDPPacket
 
 class TopoFind(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_5.OFP_VERSION]
@@ -25,7 +25,7 @@ class TopoFind(app_manager.RyuApp):
         super(TopoFind, self).__init__(*args, **kwargs)
         self.topo = Topology()
         self.networkGraph=NetworkGraph()
-        self.monitor_thread = hub.spawn(self._monitor)
+        # self.monitor_thread = hub.spawn(self._monitor)
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
@@ -100,7 +100,11 @@ class TopoFind(app_manager.RyuApp):
         dst_ipv6 = ipv6_pkt.dst
         
         if dst_ipv6 == "ff02::fb":
-            self.logger.info(f"收到 mDNS 封包: SRC={src_ipv6}, DST={dst_ipv6}")
+            # self.logger.info(f"收到 mDNS 封包: SRC={src_ipv6}, DST={dst_ipv6}")
+            return
+        
+        if dst_ipv6.startswith("ff"):
+            self.logger.info(f"收到多播封包: SRC={src_ipv6}, DST={dst_ipv6}")
             return
 
         print(f"取得 IPv6 封包: SRC={src_ipv6}, DST={dst_ipv6}")
@@ -113,7 +117,7 @@ class TopoFind(app_manager.RyuApp):
             return
         
         self.logger.info(f'src name: {src_name}, dst name: {dst_name}')
-
+        
         path = self.write_path_to_switch(src_name, dst_name)
         
         next_node = self.networkGraph.get_next_hop(path)[datapath.id]
@@ -302,7 +306,7 @@ class TopoFind(app_manager.RyuApp):
         else:
             self.networkGraph.del_node(u)
     
-    def write_path_to_switch(self, src, dst):
+    def write_path_to_switch(self, src, dst, ip_proto=None):
         
         path, length = self.networkGraph.dijkstra(src, dst)
         next_hop = self.networkGraph.get_next_hop(path)
@@ -321,17 +325,29 @@ class TopoFind(app_manager.RyuApp):
             dp = self.topo.get_datapath(sw)
 
             parser = dp.ofproto_parser
-            match_ipv6 = parser.OFPMatch(
-                eth_type=ether_types.ETH_TYPE_IPV6,
-                ipv6_src=start_ipv6,
-                ipv6_dst=dest_ipv6
-            )
+            match_ipv6 = self.set_OFPMatch(parser, start_ipv6, dest_ipv6, ip_proto=ip_proto)
 
             actions = [parser.OFPActionOutput(port_u)]
             self.logger.info(f'      Writing rule in switch: {dp.id}')
             self.add_flow(dp, 10, match_ipv6, actions)
         
         return path
+    
+    def set_OFPMatch(self, parser, ipv6_src, ipv6_dst, ip_proto=None):
+        if ip_proto is None:
+            match = parser.OFPMatch(
+                eth_type=ether_types.ETH_TYPE_IPV6,
+                ipv6_src=ipv6_src,
+                ipv6_dst=ipv6_dst
+            )
+        else:
+            match = parser.OFPMatch(
+                eth_type=ether_types.ETH_TYPE_IPV6,
+                ipv6_src=ipv6_src,
+                ipv6_dst=ipv6_dst,
+                ip_proto=ip_proto
+            )
+        return match
     
     def _monitor(self):
         """ 每 2 秒查詢一次 switch 的 port 統計資訊 """

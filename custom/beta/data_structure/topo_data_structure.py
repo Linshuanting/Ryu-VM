@@ -3,7 +3,10 @@ from sortedcontainers import SortedList
 from typing import List, Dict, Tuple, Set
 import re
 import logging
-from utils import tuple_to_str, to_dict, str_to_tuple
+import os, sys
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+from beta.tools.utils import tuple_to_str, to_dict, str_to_tuple
 
 logging.basicConfig(
     level=logging.INFO, # DEBUG, INFO, WARNING, ERROR, CRITICAL
