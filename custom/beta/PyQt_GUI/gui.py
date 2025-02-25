@@ -6,7 +6,7 @@ from PyQt5.QtCore import QTimer
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from beta.tools.topo_parser import TopologyParser
+from beta.tools.commodity_parser import commodity_parser as cm_parser
 from beta.tools.utils import to_dict
 from gui_tools import get_bandwidth, get_commodity, run_algorithm
 
@@ -61,10 +61,13 @@ class RyuFlowMonitor(QWidget):
         self.setLayout(main_layout)
 
     def start_auto_fetch(self):
+
+        self.fetch_data()  # 立即执行一次获取数据
+
         """ 启动定时器，每隔 5 秒自动 fetch data """
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.fetch_data)
-        self.timer.start(5000)  # 5000ms = 5秒
+        self.timer.start(15000)  # 5000ms = 5秒
 
     def fetch_data(self):
         try:
@@ -123,10 +126,14 @@ class RyuFlowMonitor(QWidget):
             formatted_links = [entry[1] for entry in parsed_links]
 
             # 解析 `hosts` 数据
+            hosts = {key: value for key, value in data.get("hosts", {}).items()}
             hosts_data = json.dumps(data.get("hosts", {}), indent=4, ensure_ascii=False)
 
             self.latest_links = links_data
             self.latest_nodes = list(sorted(nodes_set))
+
+            links_len = len(links_data) - len(hosts)*2
+            print(f"switch links amount: {links_len}")
 
             # 更新 GUI 文本框
             self.links_text.setPlainText("\n".join(formatted_links))
@@ -148,15 +155,19 @@ class RyuFlowMonitor(QWidget):
             links = self.latest_links
             nodes = self.latest_nodes
 
+            print(f"link: {links}")
+
             capacities = get_bandwidth(links)
             commodities = get_commodity(nodes, 2)
 
+            print(f"commodites: {commodities}")
+
             res = run_algorithm(nodes, links, capacities, commodities)
 
-            packet = {
-                "commodities_and_paths": to_dict(res),
-                "commodities_data": commodities
-            }
+            print(res)
+
+            parser = cm_parser()
+            packet = parser.serialize(res, commodities)
 
             # 将结果转换为格式化 JSON 并显示
             output_text = json.dumps(packet, indent=4, ensure_ascii=False)

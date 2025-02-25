@@ -5,11 +5,9 @@ class NetworkGraph:
         """ 初始化 NetworkX 圖 """
         self.graph = nx.Graph()
 
-    def initialize_graph(self, links_dict):
-        """ 使用字典來初始化整個網路拓撲 """
+    def initialize_graph(self):
+        """ 初始化整個網路拓撲 """
         self.graph.clear()  # 清空舊圖
-        for (u, v), weight in links_dict.items():
-            self.add_link(u, v, weight)
 
     def add_link(self, u, v, weight=1):
         """ 添加一條鏈路到 NetworkX 拓撲圖 """

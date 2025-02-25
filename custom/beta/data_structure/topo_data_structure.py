@@ -23,7 +23,12 @@ class Topology():
     SINGLE_IP_STARTWITH = '2001'
 
     def __init__(self):
-        
+        self.reset()
+
+    def reset(self):
+        """ 重置所有成員變數，使其回到初始狀態 """
+        logger.info("Resetting Topology Data...")
+
         # (u, v) link to (p, q) port using on switch u, v, respectively
         self.links = {}
         # host_name to host_context
@@ -43,6 +48,8 @@ class Topology():
         # save all commodity
         self.commodities = []
         self.host_counter = 0
+
+        logger.info("Topology reset complete.")
 
     def set_link(self, u, v, port_u, port_v):
         u, v = self.turn_to_key(u), self.turn_to_key(v)
@@ -270,11 +277,26 @@ class Topology():
             logger.debug(f"the sw_id:{id} is exist, new datapath:{datapath} overwrites the old datapath:{tmp}")
         return id
     
+    def del_datapath(self, datapath, id=None):
+        """ 刪除指定的 Datapath """
+        if id is None:
+            id = datapath.id  # 如果未提供 id，則使用 datapath.id
+        id = self.turn_to_key(id)  # 轉換 id 以確保一致性
+
+        if id in self.datapath:
+            del self.datapath[id]  # 從字典中刪除該 Datapath
+            self.del_link(datapath)
+
+            logger.info(f"刪除交換機 {id} (datapath: {datapath})")
+        else:
+            logger.warning(f"交換機 {id} 不存在，無法刪除")
+    
     def get_datapath(self, id):
         id = self.turn_to_key(id)
         if id in self.datapath:
             return self.datapath[id]
         logger.warning(f"the sw_id:{id} is not exist")
+        return None
     
     def get_datapaths(self) -> Dict:
         return self.datapath

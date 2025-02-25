@@ -8,7 +8,8 @@ def get_bandwidth(links):
     
     capacities = {}
 
-    for a, b in links:
+    for link in links.keys():
+        a, b = link.rsplit("-", 1)  # 源设备
         capacity = 0
         if a.startswith("h") or b.startswith("h"):
             capacity = 50

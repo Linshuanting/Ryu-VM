@@ -40,4 +40,17 @@ class TopologyRestController(ControllerBase):
             import traceback
             traceback.print_exc()  # 印出完整堆疊
             return Response(status=500, body=f"Error: {e}")
-
+        
+    @route('server', '/send_algorithm_result_to_switch', methods=['POST'])
+    def upload_data(self, req, **kwargs):
+        try:
+            # 从请求体中解析 JSON 数据
+            body = req.body
+            data = json.loads(body)
+            print("Received data from client:")
+            print(f"data type: {type(data)}")
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()  # 印出完整堆疊
+            return Response(status=500, body=f"Error: {e}")

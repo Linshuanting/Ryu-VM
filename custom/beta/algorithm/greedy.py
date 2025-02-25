@@ -37,6 +37,7 @@ class myAlgorithm:
 
             print(f"the name: {k_name}")
             print(f"phase 1")
+            print(f"filtered_E: {filtered_E}")
 
             while k_demand > 0:
                 
@@ -101,6 +102,7 @@ class myAlgorithm:
         st = ST(V, E)
         st.turn_negative_edge()
         tree = st.build_by_prim(src)
+        print(f"prim algorithm result: {tree}")
         st.turn_negative_edge()
         return st.turn_negative_edge(tree)
 

@@ -8,6 +8,7 @@ from data_structure.multi_flabel import MultiFLabelDB
 from mininet_connect import MininetSSHManager
 from tools.utils import print_dict, append_to_json, initialize_file
 from topo_rest_controller import TopologyRestController
+from tools.topo_parser import TopologyParser
 
 class MyController(TopoFind):
 
@@ -218,6 +219,10 @@ class MyController(TopoFind):
                                     )
         
         datapath.send_msg(req)
+
+    def assign_commodities_to_db(self, commodities):
+        parser = TopologyParser()
+        
 
     def assign_commodities_hosts_to_multi_ip(self, commodities_data):
         for data in commodities_data:

@@ -25,7 +25,27 @@ class TopoFind(app_manager.RyuApp):
         super(TopoFind, self).__init__(*args, **kwargs)
         self.topo = Topology()
         self.networkGraph=NetworkGraph()
+        self.topo_monitor_thread = hub.spawn(self._topo_monitor)
         # self.monitor_thread = hub.spawn(self._monitor)
+
+    def initialize(self):
+
+        self.logger.info("Mininet 停止，Ryu 重新初始化...")
+        self.topo.reset()
+        self.networkGraph.initialize_graph()
+
+    @set_ev_cls(ofp_event.EventOFPStateChange, [MAIN_DISPATCHER, DEAD_DISPATCHER])
+    def state_change_handler(self, ev):
+        """ 追蹤交換機的連線與斷開 """
+        datapath = ev.datapath
+        if ev.state == MAIN_DISPATCHER:  # 交換機連線
+            self.topo.set_datapath(datapath=datapath)
+            self.logger.info(f"交換機 {datapath.id} 已連接")
+        elif ev.state == DEAD_DISPATCHER:  # 交換機斷開
+            if self.topo.get_datapath(datapath.id):
+                self.topo.del_datapath(datapath=datapath)
+                self.networkGraph.del_node(datapath.id)
+                self.logger.info(f"交換機 {datapath.id} 已斷開")
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
@@ -41,8 +61,6 @@ class TopoFind(app_manager.RyuApp):
         actions = [parser.OFPActionOutput(ofproto.OFPP_CONTROLLER,
                                           ofproto.OFPCML_NO_BUFFER)]
         self.add_flow(datapath, 0, match, actions)
-
-        self.topo.set_datapath(datapath)
 
         portRequestmsg = parser.OFPPortDescStatsRequest(datapath)
         datapath.send_msg(portRequestmsg)
@@ -357,3 +375,10 @@ class TopoFind(app_manager.RyuApp):
             self.topo.print_datapath()
             print(f'------------------------------')
             hub.sleep(2) 
+
+    def _topo_monitor(self):
+        """ 持續檢查是否所有交換機都已斷開 """
+        while True:
+            hub.sleep(5)  # 每 5 秒檢查一次
+            if not self.topo.get_datapaths():  # 如果沒有交換機，執行 initialize()
+                self.initialize()
