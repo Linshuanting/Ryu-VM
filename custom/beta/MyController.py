@@ -3,12 +3,12 @@ from typing import List, Dict, Tuple, Set
 import tools.selection_method_parser as sm_parser
 from ryu.lib.packet import ethernet, ether_types
 from ryu.app.wsgi import WSGIApplication
-from data_structure.multi_db import MultiGroupDB
-from data_structure.multi_flabel import MultiFLabelDB
-from mininet_connect import MininetSSHManager
 from tools.utils import print_dict, append_to_json, initialize_file
 from topo_rest_controller import TopologyRestController
 from tools.topo_parser import TopologyParser
+from data_structure.multiGroup_db import MultiGroupDB as MG_DB
+from tools.commodity_parser import commodity_parser as cm_parser
+from tools.ssh_connect import SSHManager
 
 class MyController(TopoFind):
 
@@ -19,120 +19,138 @@ class MyController(TopoFind):
         print("My Controller Initialize")
         self.group_id_counter = 1
         self.priority = 100
-        self.multi_db = MultiGroupDB()
-        self.multi_flabel_db = MultiFLabelDB()
-        self.mininet = MininetSSHManager()
+        self.group_db = MG_DB()
+        self.sshd = SSHManager()
         self.file_name = "~/mininet/custom/output.json"
         initialize_file(self.file_name)
         self.start_wsgi(**kwargs)
 
     def test(self):
         # test function
-        dp_id, group_id = 1, 9999
-        dp = self.topo.get_datapath(dp_id)
-        self.send_flowMod_to_switch(dp, 1, "ff38::1", group_id)
         pass
 
-    def run(self, commodities):
+    def apply_instruction_to_switch(self, name_list):
 
-        self.assign_commodities_hosts_to_multi_ip(commodities)
-        self.assign_commodities_hosts_to_multi_Flabel_Group(commodities)
-        self.send_instruction()
-        self.connect_to_host_and_send_setting_cmd(commodities)
-        self.ask_host_to_send_packet(commodities)
+        self.logger.info(f"send {name_list} to switch")
 
-        # 以後用來新增 ssh 連線用的
-        # 目前還未完工，會顯示連線失敗，需要做修正
-        # self.mininet.set_hosts(self.topo.get_all_host_single_ipv6())
-        # print(self.mininet.batch_run_command("ip -6 route show"))
+        for name in name_list:
+            commodity = self.group_db.get_commodity(name)
+            commodity_group_list = self.group_db.get_commodity_group_list(name)
+            src = self.group_db.get_src(name)
+            dsts = self.group_db.get_dsts(name)
+            paths = self.group_db.get_paths(name)
 
-    def send_instruction(self):
-
-        print ("------ start send instruction to switchs ------")
-
-        commodities = self.topo.get_commodities() # commodities name List
-        for commodity in commodities:
-            paths = self.topo.get_paths(commodity)
-            print(f"-- {commodity} --")
-            for tree in paths:
-                switch_to_port_bandwidth = {}
-                switch_to_inport = {}
-                nodes = set()
-                tree_bandwidth = 0
-                print(f"---- tree ----")
+            for group in commodity_group_list:
                 
-                for (u, v), bw in tree.items():
-                    port_u, port_v = self.topo.get_link(u, v)
-                    
-                    # 判斷每個 switch 要流出的 port，以及其權重
-                    if u not in switch_to_port_bandwidth:
-                        switch_to_port_bandwidth[u] = [(port_u, bw)]
-                        tree_bandwidth = bw
-                    else:
-                        switch_to_port_bandwidth[u].append((port_u, bw))
-                    # 判斷每個 switch 流入口，來當作 match 條件
-                    if v not in switch_to_inport:
-                        switch_to_inport[v] = [port_v]
-                    else:
-                        switch_to_inport[v].append(port_v)
+                flow_inport_to_switch = {}
+                flow_out_port = {}
+                nodes = set()
 
+                for (u, v), bw in group.get_path().items():
+                    
+                    port_u, port_v = self.topo.get_link(u, v)
+                    flow_out_port.setdefault(u, []).append((port_u, bw))
+                    flow_inport_to_switch[v] = port_v
+                    
                     if not u.startswith('h'):
                         nodes.add(u)
                     if not v.startswith('h'):
                         nodes.add(v)
 
-                multi_ip = self.multi_db.get_commodity_ip(commodity)
-                src, dsts = self.multi_db.get_src_host_from_commodity(commodity), self.multi_db.get_dst_hosts_from_commodity(commodity)
-                print(f"Multi IP:{multi_ip}")
-                print(f"src:{src}, dsts:{dsts}")
-                multi_flabel_val, multi_flabel_mask = self.multi_flabel_db.assign_subgroup(commodity)
-                print(f"Multi Flow Label:{multi_flabel_val:05x}, Flow Label Mask:{multi_flabel_mask:05x}")
-                print(f"Multi Flow Bandwidth:{tree_bandwidth}")
-                self.record_data_to_json(commodity, multi_ip, src, dsts, multi_flabel_val, multi_flabel_mask, tree_bandwidth)
+                ipv6_addr = group.get_ipv6()
+                flabel = group.get_flabel()
+                mask = group.get_flabel_mask()
 
-                print_dict(tree)
-                for dp_id in nodes:
-                    dp = self.topo.get_datapath(dp_id)
+                self.logger.info(f"multi ipv6:{ipv6_addr}, flabel:{hex(flabel)}, mask:{hex(mask)}")
+
+                # node is datapath_id
+                for node in nodes:
+                    dp = self.topo.get_datapath(node)
+                    out_port_list = flow_out_port[node]
+                    inport = flow_inport_to_switch[node]
                     group_id = self.group_id_counter
-                    port_bw_list = switch_to_port_bandwidth[dp_id]
-                    # 處理每個 switch 的 output 流向
-                    if len(port_bw_list) > 1:
-                        self.send_group_multicast_method(dp, port_bw_list, group_id)
+
+                    if len(out_port_list) > 1:
+                        self.send_group_multicast_method(dp, out_port_list, group_id)
                     else:
-                        self.send_group_selection_method(dp, port_bw_list, group_id)
-                    # 處理每個 switch 的 inport 判斷
-                    for inport in switch_to_inport[dp_id]:
+                        self.send_group_selection_method(dp, out_port_list, group_id)
+
+                    
                         # self.send_flowMod_to_switch(dp, inport, group_id, multi_ip)
-                        self.send_flowMod_to_switch(dp, inport, group_id, multi_ip=multi_ip, multi_flabel_val=multi_flabel_val, multi_flabel_mask=multi_flabel_mask)
+                    self.send_flowMod_to_switch(
+                            dp, 
+                            inport, 
+                            group_id, 
+                            multi_ip=ipv6_addr, 
+                            multi_flabel_val=flabel, 
+                            multi_flabel_mask=mask)
                     
                     self.group_id_counter+=1
+
+    def set_ssh_connect_way(self, host):
+        
+        if self.sshd.check_host(host):
+            return
+        
+        if not self.topo.get_host_single_ipv6(host):
+            return
+        
+        self.logger.info(f"Add {host} in ssh database, ip: {self.topo.get_host_single_ipv6(host)}")
+
+        self.sshd.add_host(
+                hostname=host, 
+                ip=self.topo.get_host_single_ipv6(host),
+                username='root',
+                password='root')
     
-    def connect_to_host_and_send_setting_cmd(self, commodities):
+    def setting_commodity_ip_to_host(self, name_list):
         
-        self.mininet.set_hosts(self.topo.get_all_host_single_ipv6())
-        print(self.topo.get_all_host_single_ipv6())
-        self.mininet.print_hosts()
+        self.logger.info(f"Start setting commodity ip to host")
+
+        for name in name_list:
+            src = self.group_db.get_src(name)
+            dsts = self.group_db.get_dsts(name)
+            multi_group_ip = self.group_db.get_ipv6(name)
+
+            self.logger.info(f"name:{name}, src:{src}, dsts:{dsts}, ip:{multi_group_ip}")
+
+            nodes = [src] + dsts 
+
+            self.logger.info(f"nodes: {nodes}")
+
+            # 確認 sshd 裡面存入了連接方式
+            # 若是沒有，則存入
+            for node in nodes:
+                self.set_ssh_connect_way(node)
+
+                host_nic = self.sshd.get_host_default_nic(node)
+                ipaddr_cmd = self.sshd.get_setting_ipaddr_ipv6_group_cmd(multi_group_ip, host_nic)
+                maddr_cmd = self.sshd.get_setting_maddr_ipv6_cmd(multi_group_ip, host_nic)
+                route_cmd = self.sshd.get_setting_route_ipv6_cmd(multi_group_ip, host_nic)
+
+                self.sshd.execute_command(node, ipaddr_cmd)
+                self.sshd.execute_command(node, route_cmd)
+                self.sshd.execute_command(node, maddr_cmd)
+
+    def ask_host_to_send_packets(self, commodities_name_list):
         
-        for commodity in commodities:
-            print(f"執行 {commodity} 中，連接 host 的指令")
-            group_ip = self.multi_db.get_commodity_ip(commodity['name'])
-            src_host = commodity['source']
-            dst_hosts = commodity['destinations']
-            self.mininet.run_source_cmd(src_host, group_ip)
-            self.mininet.run_destinations_cmd(dst_hosts, group_ip)
+        for name in commodities_name_list:
+            src = self.group_db.get_src(name)
+            src_ip = self.topo.get_host_single_ipv6(src)
+            group_multi_ip = self.group_db.get_ipv6(name)
 
-    def ask_host_to_send_packet(self, commodities):
+            for group in self.group_db.get_commodity_group_list(name):
+                flabel = group.get_flabel()
+                cmd = self.sshd.get_send_flabel_packet_cmd(
+                    src_ip=src_ip,
+                    dst_ip=group_multi_ip,
+                    fl_number_start=flabel
+                )
 
-        for commodity in commodities:
-            comdity = commodity['name']
-            group_ip = self.multi_db.get_commodity_ip(comdity)
-            src_host = self.multi_db.get_src_host_from_commodity(comdity)
-            src_ip = self.topo.get_host_single_ipv6(src_host)
-            flabel_list = self.multi_flabel_db.get_all_subgroup(comdity)
-            for (flabel_value, flabel_mask) in flabel_list:
-                self.mininet.run_sending_flabel_packet_cmd(src_host, src_ip=src_ip, dst_ip=group_ip, flabel_start=flabel_value)
+                self.logger.info(f"** Start send flabel packet from {src}")
 
-
+                self.sshd.execute_command(src, cmd)
+    
     def send_flowMod_to_switch(self, 
                                datapath, 
                                inport, 
@@ -150,7 +168,7 @@ class MyController(TopoFind):
             ipv6_flabel = (multi_flabel_val, multi_flabel_mask) # mask 後面 12 bits(3 bytes)，只看前 8 bits
         )
         actions = [parser.OFPActionGroup(group_id)]
-        # actions = [parser.OFPActionOutput(1)]
+        # actions = [parser.OFPActionOutput(1)] 
         self.add_flow(datapath, self.priority, match, actions)
     
     def send_group_multicast_method(self, datapath, port_weight_list, group_id):
@@ -220,23 +238,27 @@ class MyController(TopoFind):
         
         datapath.send_msg(req)
 
-    def assign_commodities_to_db(self, commodities):
-        parser = TopologyParser()
+    def assign_commodities_to_db(self, commodities) -> List:
         
+        parser = cm_parser()
+        names, commodities_dict = parser.parser(commodities)
 
-    def assign_commodities_hosts_to_multi_ip(self, commodities_data):
-        for data in commodities_data:
-            commodity = data['name']
-            self.multi_db.create_group_for_commodity(commodity)
-            self.multi_db.add_host_to_group(commodity, src_host=data['source'], dst_hosts=data['destinations'])
-    
-    def assign_commodities_hosts_to_multi_Flabel_Group(self, commodities_data):
-        for data in commodities_data:
-            commodity = data['name']
-            self.multi_flabel_db.create_group_for_commodity(commodity)
-            self.multi_flabel_db.add_host_to_group(commodity, data['source'])
-            for dst in data['destinations']:
-                self.multi_flabel_db.add_host_to_group(commodity, dst)
+        self.logger.info(f"Start writting commodities to database in RYU")
+
+        for name in names:
+            src = parser.parse_src(name, commodities_dict)
+            dsts = parser.parse_dsts(name, commodities_dict)
+            paths = parser.parse_paths(name, commodities_dict)
+            bw = parser.parse_demand(name, commodities_dict)
+            self.group_db.set_commodities(
+                commodtiy_name=name,
+                src=src,
+                dsts=dsts,
+                paths=paths,
+                bw=bw
+            )
+        
+        return names
             
     def record_data_to_json(self, commodity, multi_ip, src, dsts, multi_flabel_val, multi_flabel_mask, tree_bandwidth):
         """

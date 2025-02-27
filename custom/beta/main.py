@@ -6,7 +6,7 @@ from algorithm.greedy import myAlgorithm  # 替换为你的主代码文件名
 from data_structure.topo_data_structure import Topology
 from rest_client import RestAPIClient
 from tools.topo_parser import TopologyParser
-from mininet_connect import MininetSSHManager
+from custom.beta.deprecated.mininet_connect import MininetSSHManager
 from tools.utils import print_json, to_dict
 
 def start_controller():

@@ -88,7 +88,6 @@ class MininetSSHManager:
         for host, ip in hosts.items():
             self.set_host(host, ip)
 
-
     def get_host_NIC(self, host) -> str:
         return f"{host}-eth0"
     

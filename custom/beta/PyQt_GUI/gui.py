@@ -11,7 +11,7 @@ from beta.tools.utils import to_dict
 from gui_tools import get_bandwidth, get_commodity, run_algorithm
 
 # Ryu 控制器 REST API
-RYU_API_URL = "http://localhost:8080/topology"  # 查詢交換機 1 的流表
+RYU_API_URL = "http://localhost:8080"  # 查詢交換機 1 的流表
 
 class RyuFlowMonitor(QWidget):
     def __init__(self):
@@ -62,17 +62,17 @@ class RyuFlowMonitor(QWidget):
 
     def start_auto_fetch(self):
 
-        self.fetch_data()  # 立即执行一次获取数据
+        self.fetch_topology_data()  # 立即执行一次获取数据
 
         """ 启动定时器，每隔 5 秒自动 fetch data """
         self.timer = QTimer(self)
-        self.timer.timeout.connect(self.fetch_data)
+        self.timer.timeout.connect(self.fetch_topology_data)
         self.timer.start(15000)  # 5000ms = 5秒
 
-    def fetch_data(self):
+    def fetch_topology_data(self):
         try:
             # 这里替换成你的 Ryu REST API URL
-            url = RYU_API_URL
+            url = f'{RYU_API_URL}/topology'
             response = requests.get(url)
             data = response.json()
 
@@ -158,16 +158,27 @@ class RyuFlowMonitor(QWidget):
             print(f"link: {links}")
 
             capacities = get_bandwidth(links)
-            commodities = get_commodity(nodes, 2)
+            input_commodities = get_commodity(nodes, 2)
 
-            print(f"commodites: {commodities}")
+            print(f"commodites: {input_commodities}")
 
-            res = run_algorithm(nodes, links, capacities, commodities)
+            res = run_algorithm(nodes, links, capacities, input_commodities)
 
             print(res)
 
             parser = cm_parser()
-            packet = parser.serialize(res, commodities)
+            packet = []
+            for com in input_commodities:
+                commodity = parser.serialize_commodity(
+                    name=com["name"],
+                    src=com["source"],
+                    dsts=com["destinations"],
+                    demand=com["demand"],
+                    paths=res[com["name"]]
+                )
+                packet = parser.add_packet(commodity, packet)
+
+            self.upload_commodity_data(packet)
 
             # 将结果转换为格式化 JSON 并显示
             output_text = json.dumps(packet, indent=4, ensure_ascii=False)
@@ -175,6 +186,29 @@ class RyuFlowMonitor(QWidget):
 
         except Exception as e:
             self.result_text.setPlainText(f"运行失败: {str(e)}")
+
+    def upload_commodity_data(self, data):
+        """
+        將資料發送到 API，若 data 已經是 JSON 字串，則不再進行 json.dumps()
+        """
+        try:
+            # 檢查 data 是否已經是 JSON 字串
+            if isinstance(data, str):
+                json_data = data  # 直接使用
+            else:
+                json_data = json.dumps(data, indent=4)  # 轉換為 JSON 字串
+
+            print(json_data)  # 偵錯用，確認 JSON 內容
+
+            headers = {'Content-Type': 'application/json'}  # 設定 JSON header
+            response = requests.post(RYU_API_URL + "/test", data=json_data, headers=headers)
+
+            response.raise_for_status()  # 若非 2xx，拋出異常
+            return response.text  # 假設伺服器回傳 JSON
+
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Error posting data to API: {e}")
+            return None
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@ class myAlgorithm:
         self.capacities = {tuple(re.split(r'[,-]', link)): value for link, value in capacities.items()}
         self.commodities = commodities
     
-    def run(self, R1:int, R2:int) -> Dict[str, Dict[Tuple[str, str], float]]:
+    def run(self, R1:int, R2:int) -> Dict[str, List[Dict[Tuple[str, str], float]]]:
 
         return self.greedy(self.nodes, self.capacities, self.commodities, R1, R2)
 
@@ -21,7 +21,7 @@ class myAlgorithm:
             K: List[Dict],
             R1: int, 
             R2: int
-        ) -> Dict[str, Dict[Tuple[str, str], float]]:
+        ) -> Dict[str, List[Dict[Tuple[str, str], float]]]:
         
         Res = {}
 
@@ -35,16 +35,16 @@ class myAlgorithm:
             lower_bound = k_demand/R1
             filtered_E = {e:E[e] for e in E if E[e] >= lower_bound}
 
-            print(f"the name: {k_name}")
-            print(f"phase 1")
-            print(f"filtered_E: {filtered_E}")
+            # print(f"the name: {k_name}")
+            # print(f"phase 1")
+            # print(f"filtered_E: {filtered_E}")
 
             while k_demand > 0:
                 
                 tree = self.build_spanning_tree(V, filtered_E, k_src)
-                self.print_data(tree)
+                # self.print_data(tree)
                 if(self.is_connect_tree(tree, k_src, k_dest) is False):
-                    print(f"{k_name} in phase 1 build an unconnecting tree")
+                    # print(f"{k_name} in phase 1 build an unconnecting tree")
                     break
                 k_demand, path = self.decrease_bandwidth(k_src, k_dest, k_demand, tree, filtered_E)
                 # self.add_path_to_result(path, flow)
@@ -57,13 +57,13 @@ class myAlgorithm:
                 Res[k_name] = flow
                 continue
 
-            print(f"phase 2")
+            # print(f"phase 2")
 
             for i in range(R2):
                 tree = self.build_spanning_tree(V, E, k_src)
                 self.print_data(tree)
                 if (self.is_connect_tree(tree, k_src, k_dest) is False):
-                    print(f"{k_name} in phase 2 build an unconnecting tree")
+                    # print(f"{k_name} in phase 2 build an unconnecting tree")
                     break
                 k_demand, path = self.decrease_bandwidth(k_src, k_dest, k_demand, tree, E)
                 # self.add_path_to_result(path, flow)
@@ -75,8 +75,8 @@ class myAlgorithm:
             if k_demand != 0:
                 return Res
         
-        print(f"the remaining graph is")
-        self.print_data(E)
+        # print(f"the remaining graph is")
+        # self.print_data(E)
 
         return Res
 
