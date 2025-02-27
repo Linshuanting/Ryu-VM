@@ -4,7 +4,7 @@ import subprocess, random
 from typing import Dict, Tuple, List, Set
 from algorithm.greedy import myAlgorithm  # 替换为你的主代码文件名
 from data_structure.topo_data_structure import Topology
-from rest_client import RestAPIClient
+from custom.beta.PyQt_GUI.rest_client import RestAPIClient
 from tools.topo_parser import TopologyParser
 from custom.beta.deprecated.mininet_connect import MininetSSHManager
 from tools.utils import print_json, to_dict

@@ -5,7 +5,6 @@ from ryu.lib.packet import ethernet, ether_types
 from ryu.app.wsgi import WSGIApplication
 from tools.utils import print_dict, append_to_json, initialize_file
 from topo_rest_controller import TopologyRestController
-from tools.topo_parser import TopologyParser
 from data_structure.multiGroup_db import MultiGroupDB as MG_DB
 from tools.commodity_parser import commodity_parser as cm_parser
 from tools.ssh_connect import SSHManager
