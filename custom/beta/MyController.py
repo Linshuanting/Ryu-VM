@@ -8,6 +8,7 @@ from topo_rest_controller import TopologyRestController
 from data_structure.multiGroup_db import MultiGroupDB as MG_DB
 from tools.commodity_parser import commodity_parser as cm_parser
 from tools.ssh_connect import SSHManager
+import concurrent.futures
 
 class MyController(TopoFind):
 
@@ -133,22 +134,34 @@ class MyController(TopoFind):
 
     def ask_host_to_send_packets(self, commodities_name_list):
         
-        for name in commodities_name_list:
-            src = self.group_db.get_src(name)
-            src_ip = self.topo.get_host_single_ipv6(src)
-            group_multi_ip = self.group_db.get_ipv6(name)
+        def send_packet(src, cmd):
+            """執行 SSH 命令的封裝函數"""
+            self.sshd.execute_command(src, cmd)
 
-            for group in self.group_db.get_commodity_group_list(name):
-                flabel = group.get_flabel()
-                cmd = self.sshd.get_send_flabel_packet_cmd(
-                    src_ip=src_ip,
-                    dst_ip=group_multi_ip,
-                    fl_number_start=flabel
-                )
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            futures = []
+            
+            for name in commodities_name_list:
+                src = self.group_db.get_src(name)
+                src_ip = self.topo.get_host_single_ipv6(src)
+                group_multi_ip = self.group_db.get_ipv6(name)
 
-                self.logger.info(f"** Start send flabel packet from {src}")
+                for group in self.group_db.get_commodity_group_list(name):
+                    flabel = group.get_flabel()
+                    cmd = self.sshd.get_send_flabel_packet_cmd(
+                        src_ip=src_ip,
+                        dst_ip=group_multi_ip,
+                        fl_number_start=flabel
+                    )
 
-                self.sshd.execute_command(src, cmd)
+                    # Logging
+                    self.logger.info(f"*** Start send flabel packet from {src}")
+
+                    # 使用 ThreadPoolExecutor 來並行執行
+                    futures.append(executor.submit(send_packet, src, cmd))
+
+            # 等待所有的執行緒完成
+            # concurrent.futures.wait(futures)
     
     def send_flowMod_to_switch(self, 
                                datapath, 

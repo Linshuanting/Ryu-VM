@@ -16,45 +16,6 @@ class TopologyRestController(ControllerBase):
         body = json.dumps(converted_data, indent=4)
         return Response(content_type='application/json; charset=UTF-8', body=body)
     
-    
-    @route('server', '/upload_algorithm_result', methods=['POST'])
-    def upload_data(self, req, **kwargs):
-        """
-        接收客户端发送的数据
-        """
-        try:
-            # 从请求体中解析 JSON 数据
-            body = req.body
-            data = json.loads(body)
-            print("Received data from client:")
-            print(f"data type: {type(data)}")
-            print(json.dumps(data, indent=4, ensure_ascii=False))
-
-            self.topology_data.set_commodities_and_paths(data['commodities_and_paths'])
-            self.controller.run(data['commodities_data'])
-            # self.controller.test()
-            
-
-            # 返回响应
-            return Response(status=200, body="Data received successfully")
-        except Exception as e:
-            import traceback
-            traceback.print_exc()  # 印出完整堆疊
-            return Response(status=500, body=f"Error: {e}")
-        
-    @route('server', '/send_algorithm_result_to_switch', methods=['POST'])
-    def upload_data_to_db(self, req, **kwargs):
-        try:
-            # 从请求体中解析 JSON 数据
-            body = req.body
-            data = json.loads(body)
-            print("Received data from client:")
-            print(f"data type: {type(data)}")
-
-        except Exception as e:
-            import traceback
-            traceback.print_exc()  # 印出完整堆疊
-            return Response(status=500, body=f"Error: {e}")
         
     @route('server', '/add_commodity_request', methods=['POST'])
     def upload_commodities_data(self, req, **kwargs):
@@ -63,6 +24,7 @@ class TopologyRestController(ControllerBase):
             commodities = json.loads(body)
 
             print(f"Assign commodities to database")
+            print(f"commodities: {commodities}")
             self.controller.assign_commodities_to_db(commodities)
 
         except Exception as e:
@@ -78,6 +40,8 @@ class TopologyRestController(ControllerBase):
             commodities_name, _ = parser.parser(json.loads(body))
 
             print(f"Setting configuration to hosts and switches")
+            print(f"commodity name: {commodities_name}")
+
             self.controller.setting_commodity_ip_to_host(commodities_name)
             self.controller.apply_instruction_to_switch(commodities_name)
 

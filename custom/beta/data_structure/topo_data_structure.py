@@ -31,6 +31,8 @@ class Topology():
 
         # (u, v) link to (p, q) port using on switch u, v, respectively
         self.links = {}
+        # (u, v) link to its max_speed bandwidth
+        self.link_bw = {}
         # host_name to host_context
         self.hosts = {}
         # host_mac_addr to host_name
@@ -41,12 +43,7 @@ class Topology():
         self.datapath = {}
         # sw_mac to sw_id, sw_port
         self.sw_mac_to_sw_context = {}
-        # the commodity to paths, calculating by algorithm
-        # commodity: {node1: [each of nodes the node1 connects]}
-        # commodity: {(u, v): bandwidth}
-        self.commodities_to_paths = {}
-        # save all commodity
-        self.commodities = []
+        
         self.host_counter = 0
 
         logger.info("Topology reset complete.")
@@ -84,6 +81,37 @@ class Topology():
             keys_to_delete = [key for key in self.links if u in key]
             for key in keys_to_delete:
                 del self.links[key]
+                logger.info(f"刪除鏈路: {key}")
+    
+    def set_link_bandwidth(self, u, v, bw):
+        u, v = self.turn_to_key(u), self.turn_to_key(v)
+        if (u, v) in self.link_bw and self.link_bw[(u, v)] is not None:
+            return 
+        self.link_bw[(u, v)] = bw
+
+    def get_link_bandwidth(self, u, v):
+        if (u, v) in self.link_bw:
+            return self.link_bw[(u, v)]
+        return None
+    
+    def del_link_bandwidth(self, u, v):
+        if self.get_hostName_from_mac(u) is None:
+            return
+        u = self.turn_to_key(u)  # 轉換 key
+        if v is not None:
+            v = self.turn_to_key(v)  # 轉換 key
+            # 刪除指定 (u, v) 鏈路
+            if (u, v) in self.link_bw:
+                del self.link_bw[(u, v)]
+                logger.info(f"刪除鏈路: ({u}, {v})")
+            if (v, u) in self.link_bw:  # 確保雙向刪除
+                del self.link_bw[(v, u)]
+                logger.info(f"刪除鏈路: ({v}, {u})")
+        else:
+            # 刪除所有與 u 相關的鏈路
+            keys_to_delete = [key for key in self.link_bw if u in key]
+            for key in keys_to_delete:
+                del self.link_bw[key]
                 logger.info(f"刪除鏈路: {key}")
     
     def print_links(self):
@@ -317,45 +345,6 @@ class Topology():
             return True
         return False
 
-    def set_commodities_and_paths_old(self, data):
-        for commodity, context in data.items():
-            paths = {}
-            for link, bw in context.items():
-                u, v = str_to_tuple(link)
-                paths[(u, v)] = bw
-            self.commodities_to_paths[commodity] = paths
-            self.commodities.append(commodity)
-
-    def get_paths(self, commodity):
-        if commodity in self.commodities_to_paths:
-            return self.commodities_to_paths[commodity]
-        logger.warning(f"The commodity:{commodity} is not exist")
-
-    def get_commodities(self):
-        return self.commodities
-    
-    def set_commodities_and_paths(
-            self, 
-            data: Dict[str, List[Dict[str, str]]]):
-        for commodity, context in data.items():
-            paths = []
-            for tree in context:
-                single_tree = {}
-                for link, bw in tree.items():
-                    u, v = str_to_tuple(link)
-                    single_tree[(u, v)] = bw
-                paths.append(single_tree)
-            """
-                "commodity1": [
-                    {
-                        "3-h0": 18,
-                        "h2-5": 18
-                    }
-                ],
-            """
-            self.commodities_to_paths[commodity] = paths
-            self.commodities.append(commodity)
-
     def is_mac(self, s):
         if isinstance(s, str) is False:
             return False
@@ -380,5 +369,6 @@ class Topology():
     def data_to_dict(self):
         return{
             "links": to_dict(self.links),
-            "hosts": to_dict(self.hosts)
+            "hosts": to_dict(self.hosts),
+            "links_bw": to_dict(self.link_bw)
         }

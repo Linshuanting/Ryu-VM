@@ -13,6 +13,7 @@ from ryu.exception import RyuException
 from data_structure.topo_data_structure import Topology
 from ryu.app.wsgi import WSGIApplication
 import threading
+import os, re
 
 
 from algorithm.Dijkstra import NetworkGraph
@@ -74,6 +75,9 @@ class TopoFind(app_manager.RyuApp):
         
         for p in body:
             self.logger.info(f'** switch {dp.id} get the PortDesc in Port:{p.port_no}')
+            self.logger.info("Port Attributes: %s", p.__dict__)
+
+
             if p.port_no != ofproto_v1_5.OFPP_CONTROLLER and p.port_no != ofproto_v1_5.OFPP_LOCAL:
                 # self.topo.set_port_in_switch(dp.id, p.port_no)
                 self.topo.set_sw_mac_to_context(p.hw_addr, dp.id, p.port_no)
@@ -123,6 +127,7 @@ class TopoFind(app_manager.RyuApp):
         
         if dst_ipv6.startswith("ff"):
             self.logger.info(f"收到多播封包: SRC={src_ipv6}, DST={dst_ipv6}")
+            # TODO
             return
 
         print(f"取得 IPv6 封包: SRC={src_ipv6}, DST={dst_ipv6}")
@@ -307,11 +312,23 @@ class TopoFind(app_manager.RyuApp):
 
     def add_link_to_database(self, u, v, u_port_no, v_port_no):
         self.topo.set_link(u, v, u_port_no, v_port_no)
+        # 只有 host 會使用 mac，需要自己換成好用的單位
+        # switch 則使用 dpip，故只要是 mac addr，都會是 host
         if self.topo.is_mac(u):
             u = self.topo.get_hostName_from_mac(u)
         if self.topo.is_mac(v):
             v = self.topo.get_hostName_from_mac(v)
         self.networkGraph.add_link(u, v)
+        # 這裡因為用在 mininet 上，使用 veth pair 網卡，
+        # 用 traffic control 做流量控制，
+        # 故我們是去偵測 tc 下面的資料，而不是 switch port 物理網卡資料
+        bw = 0
+        if not self.topo.is_host(u):
+            bw = self.get_switch_port_bandwidth(u, u_port_no)
+        else:
+            bw = self.get_switch_port_bandwidth(v, v_port_no)
+        
+        self.topo.set_link_bandwidth(u, v, bw)
     
     def del_link_to_database(self, u, v=None):
         if self.topo.is_mac(u):
@@ -319,10 +336,24 @@ class TopoFind(app_manager.RyuApp):
         if self.topo.is_mac(v):
             v = self.topo.get_hostName_from_mac(v)
         self.topo.del_link(u, v)
+        self.topo.del_link_bandwidth(u, v)
         if v is not None:
             self.networkGraph.del_link(u, v)
         else:
             self.networkGraph.del_node(u)
+        
+    
+    def get_switch_port_bandwidth(self, sw, port):
+        interface = f"s{sw}-eth{port}"
+        cmd = f"tc -s class show dev {interface}"
+        result = os.popen(cmd).read()
+        match = re.search(r"rate (\d+)Mbit ceil (\d+)Mbit", result)
+        # 單位 Mbits
+        if match:
+            rate, ceil = match.groups()
+            return ceil
+        else:
+            return None
     
     def write_path_to_switch(self, src, dst, ip_proto=None):
         
@@ -377,8 +408,22 @@ class TopoFind(app_manager.RyuApp):
             hub.sleep(2) 
 
     def _topo_monitor(self):
-        """ 持續檢查是否所有交換機都已斷開 """
+        """ 持續檢查特殊狀況 """
         while True:
             hub.sleep(5)  # 每 5 秒檢查一次
             if not self.topo.get_datapaths():  # 如果沒有交換機，執行 initialize()
                 self.initialize()
+
+            # 檢查是否需要取得 link bw 資訊
+            if len(self.topo.get_links()) > 0:
+                links = self.topo.get_links()
+                for u, v in links:
+                    if self.topo.get_link_bandwidth(u, v) is None:
+                        u_port, v_port = links[(u, v)]
+                        bw = 0
+                        if not self.topo.is_host(u):
+                            bw = self.get_switch_port_bandwidth(u, u_port)
+                        else:
+                            bw = self.get_switch_port_bandwidth(v, v_port)
+                        
+                        self.topo.set_link_bandwidth(u, v, bw)

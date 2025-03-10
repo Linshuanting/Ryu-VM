@@ -18,16 +18,16 @@ def get_bandwidth(links):
         capacities[f"{a}-{b}"] = capacities.get(f"{a}-{b}", capacity)
     return capacities
 
-def get_commodity(nodes, num):
+def get_commodity(nodes, num, start=1):
 
     commodities = []
     h_nodes = [n for n in nodes if n.startswith('h')]
     if 'hffff' in h_nodes:
         h_nodes.remove('hffff')
 
-    for i in range(num):
+    for i in range(start, start + num):
         
-        commodity_name = f"commodity{i+1}"
+        commodity_name = f"commodity{i}"
 
         if not h_nodes:
             break
@@ -50,10 +50,10 @@ def get_commodity(nodes, num):
     
     return commodities
 
-def run_algorithm(nodes, links, caps, coms) -> Dict[str, Dict[Tuple[str, str], float]]:
+def run_algorithm(nodes, links, coms) -> Dict[str, Dict[Tuple[str, str], float]]:
     
     # Nodes, Links, Capacities, Commodities
-    algorithm = myAlgorithm(nodes, links, caps, coms)
+    algorithm = myAlgorithm(nodes, links, coms)
     res = algorithm.run(3, 3)
 
     return res

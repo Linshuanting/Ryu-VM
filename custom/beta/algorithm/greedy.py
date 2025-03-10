@@ -3,11 +3,10 @@ import re
 
 class myAlgorithm:
 
-    def __init__(self, nodes, links, capacities, commodities) -> None:
+    def __init__(self, nodes, link_capacities, commodities) -> None:
         
         self.nodes = set(nodes)
-        self.links = links
-        self.capacities = {tuple(re.split(r'[,-]', link)): value for link, value in capacities.items()}
+        self.capacities = {tuple(re.split(r'[,-]', link)): value for link, value in link_capacities.items()}
         self.commodities = commodities
     
     def run(self, R1:int, R2:int) -> Dict[str, List[Dict[Tuple[str, str], float]]]:
@@ -46,7 +45,9 @@ class myAlgorithm:
                 if(self.is_connect_tree(tree, k_src, k_dest) is False):
                     # print(f"{k_name} in phase 1 build an unconnecting tree")
                     break
+                print(f"Filtered E:{filtered_E}")
                 k_demand, path = self.decrease_bandwidth(k_src, k_dest, k_demand, tree, filtered_E)
+                print(f"Filtered E:{filtered_E}")
                 # self.add_path_to_result(path, flow)
                 self.add_path_respectively_to_result(path, flow)
                 self.delete_redundant_edge(lower_bound, filtered_E, path)
@@ -61,14 +62,19 @@ class myAlgorithm:
 
             for i in range(R2):
                 tree = self.build_spanning_tree(V, E, k_src)
-                self.print_data(tree)
+                
                 if (self.is_connect_tree(tree, k_src, k_dest) is False):
                     # print(f"{k_name} in phase 2 build an unconnecting tree")
                     break
+                
                 k_demand, path = self.decrease_bandwidth(k_src, k_dest, k_demand, tree, E)
+                
                 # self.add_path_to_result(path, flow)
                 self.add_path_respectively_to_result(path, flow)
                 self.delete_redundant_edge(0, E, path)
+
+                if k_demand == 0:
+                    break
             
             Res[k_name] = flow
 
@@ -133,7 +139,7 @@ class myAlgorithm:
         ) -> Tuple[float, Dict[Tuple[str, str], float]] :
 
         """
-        Decrease the using bandwidth with MST and return the graph using bandwidth
+        Decrease the using bandwidth with MST and return the bandwidth the remaining needing
 
         :param src: the start point of commodity 
         :param dsts: all of the commodity destinations
