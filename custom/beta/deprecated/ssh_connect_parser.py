@@ -22,14 +22,16 @@ class ssh_parser():
 
     def send_packet_serializer(self,
                                hostname,
-                               src_ip, 
-                               dst_ip,
-                               fl_number_start):
+                               src_ip=None, 
+                               dst_ip=None,
+                               fl_number_start=None,
+                               port = None):
         data = {
             "hostname": hostname,
             "src": src_ip,
             "dst": dst_ip,
-            "flabel": fl_number_start
+            "flabel": fl_number_start,
+            "port": port
         }
         return {k: v for k, v in data.items() if v is not None}
 

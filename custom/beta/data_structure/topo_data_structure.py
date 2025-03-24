@@ -87,7 +87,7 @@ class Topology():
         u, v = self.turn_to_key(u), self.turn_to_key(v)
         if (u, v) in self.link_bw and self.link_bw[(u, v)] is not None:
             return 
-        if bw is "None":
+        if bw == "None":
             self.link_bw[(u, v)] = None
             return 
         self.link_bw[(u, v)] = bw

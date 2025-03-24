@@ -1,3 +1,6 @@
+import os, sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+
 from topo_find import TopoFind
 from typing import List, Dict, Tuple, Set
 import tools.selection_method_parser as sm_parser
@@ -7,7 +10,8 @@ from tools.utils import print_dict, append_to_json, initialize_file
 from topo_rest_controller import TopologyRestController
 from data_structure.multiGroup_db import MultiGroupDB as MG_DB
 from tools.commodity_parser import commodity_parser as cm_parser
-from tools.ssh_connect import SSHManager
+# from tools.ssh_connect import SSHManager
+from ssh_api_client import SSHManagerAPIWrapper
 from algorithm.greedy import myAlgorithm
 import concurrent.futures
 
@@ -21,8 +25,9 @@ class MyController(TopoFind):
         self.group_id_counter = 1
         self.priority = 100
         self.group_db = MG_DB()
-        self.sshd_URL = "http://localhost:5000"
-        self.sshd = SSHManager()
+        self.sshd_URL = "http://localhost:4888"
+        # self.sshd = SSHManager()
+        self.sshd = SSHManagerAPIWrapper(port=4888)
         self.file_name = "~/mininet/custom/output.json"
         initialize_file(self.file_name)
         self.start_wsgi(**kwargs)
@@ -144,7 +149,6 @@ class MyController(TopoFind):
                     self.group_id_counter+=1
 
     def set_ssh_connect_way(self, host):
-        
         if self.sshd.check_host(host):
             return
         
@@ -160,7 +164,6 @@ class MyController(TopoFind):
                 password='root')
     
     def setting_commodity_ip_to_host(self, name_list):
-        
         self.logger.info(f"Start setting commodity ip to host")
 
         for name in name_list:
@@ -169,85 +172,40 @@ class MyController(TopoFind):
             multi_group_ip = self.group_db.get_ipv6(name)
 
             self.logger.info(f"name:{name}, src:{src}, dsts:{dsts}, ip:{multi_group_ip}")
-
-            nodes = [src] + dsts 
-
-            self.logger.info(f"nodes: {nodes}")
+            nodes = [src] + dsts
 
             for dst in dsts:
                 self.set_ssh_connect_way(dst)
+                self.sshd.execute_set_ipv6_command(dst, multi_group_ip)
 
-                host_nic = self.sshd.get_host_default_nic(dst)
-                ipaddr_cmd = self.sshd.get_setting_ipaddr_ipv6_group_cmd(multi_group_ip, host_nic)
-                self.sshd.execute_command(dst, ipaddr_cmd)
-            
             self.set_ssh_connect_way(src)
-            host_nic = self.sshd.get_host_default_nic(src)
-            route_cmd = self.sshd.get_setting_route_ipv6_cmd(multi_group_ip, host_nic)
-            self.sshd.execute_command(src, route_cmd)
-
-            # 確認 sshd 裡面存入了連接方式
-            # 若是沒有，則存入
-            # for node in nodes:
-            #     self.set_ssh_connect_way(node)
-
-            #     host_nic = self.sshd.get_host_default_nic(node)
-            #     ipaddr_cmd = self.sshd.get_setting_ipaddr_ipv6_group_cmd(multi_group_ip, host_nic)
-            #     maddr_cmd = self.sshd.get_setting_maddr_ipv6_cmd(multi_group_ip, host_nic)
-            #     route_cmd = self.sshd.get_setting_route_ipv6_cmd(multi_group_ip, host_nic)
-
-            #     self.sshd.execute_command(node, ipaddr_cmd)
-            #     self.sshd.execute_command(node, route_cmd)
-            #     self.sshd.execute_command(node, maddr_cmd)
+            self.sshd.execute_set_route_command(src, multi_group_ip)
 
     def ask_host_to_send_packets(self, commodities_name_list):
         
         def send_packet(src, cmd):
-            """執行 SSH 命令的封裝函數"""
             self.sshd.execute_command(src, cmd)
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
             futures = []
-            
             for name in commodities_name_list:
                 src = self.group_db.get_src(name)
                 dsts = self.group_db.get_dsts(name)
                 src_ip = self.topo.get_host_single_ipv6(src)
                 group_multi_ip = self.group_db.get_ipv6(name)
-                bw = self.group_db.get_bandwidth(name)
 
-                for dst in dsts:
-
-                    cmd = self.sshd.get_iperf_setting_multicast_receiver_cmd(group_multi_ip)
-                    print(f"Start Iperf Server on {dst}")
-                    send_packet(dst, cmd)
-
-
+                self.set_ssh_connect_way(src)
                 for group in self.group_db.get_commodity_group_list(name):
                     flabel = group.get_flabel()
                     sport = group.get_sport()
-                    # cmd = self.sshd.get_send_flabel_packet_cmd(
-                    #     src_ip=src_ip,
-                    #     dst_ip=group_multi_ip,
-                    #     fl_number_start=flabel
-                    # )
+                    bw = group.get_bandwidth()
+                    self.sshd.execute_iperf_client_command(
+                        hostname=src,
+                        dst_ip=group_multi_ip,
+                        bw=bw,
+                        port=sport
+                    )
 
-                    # cmd = self.sshd.get_send_flabel_packet_in_background_cmd(
-                    #     src_ip=src_ip,
-                    #     dst_ip=group_multi_ip,
-                    #     fl_number_start=flabel
-                    # )
-
-                    print(f"Get send packet cmd: {cmd}")
-
-                    cmd = self.sshd.get_iperf_send_packet_cmd(group_multi_ip, bw=bw, port=sport)
-
-                    print(f"send packet cmd: {cmd}")
-                    # Logging
-                    self.logger.info(f"*** Start send flabel packet from {src}")
-
-                    send_packet(src, cmd)
-    
     def send_flowMod_to_switch(self, 
                                datapath, 
                                inport, 
