@@ -8,6 +8,7 @@ from topo_rest_controller import TopologyRestController
 from data_structure.multiGroup_db import MultiGroupDB as MG_DB
 from tools.commodity_parser import commodity_parser as cm_parser
 from tools.ssh_connect import SSHManager
+from algorithm.greedy import myAlgorithm
 import concurrent.futures
 
 class MyController(TopoFind):
@@ -20,6 +21,7 @@ class MyController(TopoFind):
         self.group_id_counter = 1
         self.priority = 100
         self.group_db = MG_DB()
+        self.sshd_URL = "http://localhost:5000"
         self.sshd = SSHManager()
         self.file_name = "~/mininet/custom/output.json"
         initialize_file(self.file_name)
@@ -28,6 +30,60 @@ class MyController(TopoFind):
     def test(self):
         # test function
         pass
+
+    def write_multicast_to_switch(self, src, dsts, src_ip, dst_ip, curr_node_id):
+        
+        curr_node_id = str(curr_node_id)
+
+        links = [(u, v) for u, v in self.topo.get_links().keys()]
+        algo = myAlgorithm(self.topo.get_nodes())
+        algo.set_default_capacity_link(links)
+        algo.set_default_commodity(src, dsts)
+        path = algo.run(1, 1)
+
+        flow_inport_to_switch = {}
+        flow_out_port = {}
+        nodes = set()
+
+        print(f"algorithm path result: {path}")
+        name = algo.get_default_commodity_name()
+        
+        for u, v in path[name][0].keys():
+            port_u, port_v = self.topo.get_link(u, v)
+            flow_out_port.setdefault(u, []).append((port_u, 1))
+            flow_inport_to_switch[v] = port_v
+
+            if not u.startswith('h'):
+                nodes.add(u)
+            if not v.startswith('h'):
+                nodes.add(v)
+        
+        for node in nodes:
+            print(f" Setting Rule in switch{node}")
+            dp = self.topo.get_datapath(node)
+            out_port_list = flow_out_port[node]
+            inport = flow_inport_to_switch[node]
+            group_id = self.group_id_counter
+
+            if len(out_port_list) > 1:
+                self.send_group_multicast_method(dp, out_port_list, group_id)
+            else:
+                self.send_group_selection_method(dp, out_port_list, group_id)
+
+                    
+                        # self.send_flowMod_to_switch(dp, inport, group_id, multi_ip)
+                self.send_flowMod_to_switch(
+                            dp, 
+                            inport, 
+                            group_id, 
+                            src_ip=src_ip,
+                            multi_ip=dst_ip)
+                    
+                self.group_id_counter+=1
+
+        print(f"curr node:{curr_node_id}")
+        print(f"flow out port:{flow_out_port[curr_node_id]}")
+        return [port for port, _ in flow_out_port.get(curr_node_id, [])]
 
     def apply_instruction_to_switch(self, name_list):
 
@@ -118,19 +174,31 @@ class MyController(TopoFind):
 
             self.logger.info(f"nodes: {nodes}")
 
+            for dst in dsts:
+                self.set_ssh_connect_way(dst)
+
+                host_nic = self.sshd.get_host_default_nic(dst)
+                ipaddr_cmd = self.sshd.get_setting_ipaddr_ipv6_group_cmd(multi_group_ip, host_nic)
+                self.sshd.execute_command(dst, ipaddr_cmd)
+            
+            self.set_ssh_connect_way(src)
+            host_nic = self.sshd.get_host_default_nic(src)
+            route_cmd = self.sshd.get_setting_route_ipv6_cmd(multi_group_ip, host_nic)
+            self.sshd.execute_command(src, route_cmd)
+
             # 確認 sshd 裡面存入了連接方式
             # 若是沒有，則存入
-            for node in nodes:
-                self.set_ssh_connect_way(node)
+            # for node in nodes:
+            #     self.set_ssh_connect_way(node)
 
-                host_nic = self.sshd.get_host_default_nic(node)
-                ipaddr_cmd = self.sshd.get_setting_ipaddr_ipv6_group_cmd(multi_group_ip, host_nic)
-                maddr_cmd = self.sshd.get_setting_maddr_ipv6_cmd(multi_group_ip, host_nic)
-                route_cmd = self.sshd.get_setting_route_ipv6_cmd(multi_group_ip, host_nic)
+            #     host_nic = self.sshd.get_host_default_nic(node)
+            #     ipaddr_cmd = self.sshd.get_setting_ipaddr_ipv6_group_cmd(multi_group_ip, host_nic)
+            #     maddr_cmd = self.sshd.get_setting_maddr_ipv6_cmd(multi_group_ip, host_nic)
+            #     route_cmd = self.sshd.get_setting_route_ipv6_cmd(multi_group_ip, host_nic)
 
-                self.sshd.execute_command(node, ipaddr_cmd)
-                self.sshd.execute_command(node, route_cmd)
-                self.sshd.execute_command(node, maddr_cmd)
+            #     self.sshd.execute_command(node, ipaddr_cmd)
+            #     self.sshd.execute_command(node, route_cmd)
+            #     self.sshd.execute_command(node, maddr_cmd)
 
     def ask_host_to_send_packets(self, commodities_name_list):
         
@@ -143,44 +211,71 @@ class MyController(TopoFind):
             
             for name in commodities_name_list:
                 src = self.group_db.get_src(name)
+                dsts = self.group_db.get_dsts(name)
                 src_ip = self.topo.get_host_single_ipv6(src)
                 group_multi_ip = self.group_db.get_ipv6(name)
+                bw = self.group_db.get_bandwidth(name)
+
+                for dst in dsts:
+
+                    cmd = self.sshd.get_iperf_setting_multicast_receiver_cmd(group_multi_ip)
+                    print(f"Start Iperf Server on {dst}")
+                    send_packet(dst, cmd)
+
 
                 for group in self.group_db.get_commodity_group_list(name):
                     flabel = group.get_flabel()
-                    cmd = self.sshd.get_send_flabel_packet_cmd(
-                        src_ip=src_ip,
-                        dst_ip=group_multi_ip,
-                        fl_number_start=flabel
-                    )
+                    sport = group.get_sport()
+                    # cmd = self.sshd.get_send_flabel_packet_cmd(
+                    #     src_ip=src_ip,
+                    #     dst_ip=group_multi_ip,
+                    #     fl_number_start=flabel
+                    # )
 
+                    # cmd = self.sshd.get_send_flabel_packet_in_background_cmd(
+                    #     src_ip=src_ip,
+                    #     dst_ip=group_multi_ip,
+                    #     fl_number_start=flabel
+                    # )
+
+                    print(f"Get send packet cmd: {cmd}")
+
+                    cmd = self.sshd.get_iperf_send_packet_cmd(group_multi_ip, bw=bw, port=sport)
+
+                    print(f"send packet cmd: {cmd}")
                     # Logging
                     self.logger.info(f"*** Start send flabel packet from {src}")
 
-                    # 使用 ThreadPoolExecutor 來並行執行
-                    futures.append(executor.submit(send_packet, src, cmd))
-
-            # 等待所有的執行緒完成
-            # concurrent.futures.wait(futures)
+                    send_packet(src, cmd)
     
     def send_flowMod_to_switch(self, 
                                datapath, 
                                inport, 
                                group_id, 
+                               src_ip=None,
                                multi_ip=None, 
                                multi_flabel_val = None,
                                multi_flabel_mask = None):
         
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
-        match = parser.OFPMatch(
-            in_port=inport,
-            eth_type=ether_types.ETH_TYPE_IPV6,
-            ipv6_dst=multi_ip,
-            ipv6_flabel = (multi_flabel_val, multi_flabel_mask) # mask 後面 12 bits(3 bytes)，只看前 8 bits
-        )
+        match_fields = {
+            "in_port": inport,
+            "eth_type": ether_types.ETH_TYPE_IPV6
+        }
+
+        if src_ip is not None:
+            match_fields["ipv6_src"] = src_ip
+
+        if multi_ip is not None:
+            match_fields["ipv6_dst"] = multi_ip
+
+        if multi_flabel_val is not None and multi_flabel_mask is not None:
+            match_fields["ipv6_flabel"] = (multi_flabel_val, multi_flabel_mask)
+
+        match = parser.OFPMatch(**match_fields)
+
         actions = [parser.OFPActionGroup(group_id)]
-        # actions = [parser.OFPActionOutput(1)] 
         self.add_flow(datapath, self.priority, match, actions)
     
     def send_group_multicast_method(self, datapath, port_weight_list, group_id):

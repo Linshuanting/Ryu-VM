@@ -132,6 +132,8 @@ def to_dict(d):
         elif isinstance(d, (int, float, str)):
             # 保留基本類型
             return d
+        elif d is None:
+            return "None"
         else:
             # 未知類型，記錄警告並直接返回字符串表示
             print(f"Unknown type encountered: {type(d)}, value: {d}")

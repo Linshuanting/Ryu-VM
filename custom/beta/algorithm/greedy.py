@@ -3,7 +3,7 @@ import re
 
 class myAlgorithm:
 
-    def __init__(self, nodes, link_capacities, commodities) -> None:
+    def __init__(self, nodes, link_capacities={}, commodities=None) -> None:
         
         self.nodes = set(nodes)
         self.capacities = {tuple(re.split(r'[,-]', link)): value for link, value in link_capacities.items()}
@@ -45,18 +45,20 @@ class myAlgorithm:
                 if(self.is_connect_tree(tree, k_src, k_dest) is False):
                     # print(f"{k_name} in phase 1 build an unconnecting tree")
                     break
-                print(f"Filtered E:{filtered_E}")
+                
                 k_demand, path = self.decrease_bandwidth(k_src, k_dest, k_demand, tree, filtered_E)
-                print(f"Filtered E:{filtered_E}")
                 # self.add_path_to_result(path, flow)
                 self.add_path_respectively_to_result(path, flow)
                 self.delete_redundant_edge(lower_bound, filtered_E, path)
 
-            self.update_E(E, flow)
+                print(f"current flow in algorithm: {flow}, current demand:{k_demand}")
 
+            self.update_E(E, flow)
+            #  print(f"中斷點一")
             if (k_demand == 0): 
                 Res[k_name] = flow
                 continue
+            #  print(f"中斷點二")
 
             # print(f"phase 2")
 
@@ -72,10 +74,13 @@ class myAlgorithm:
                 # self.add_path_to_result(path, flow)
                 self.add_path_respectively_to_result(path, flow)
                 self.delete_redundant_edge(0, E, path)
-
+                # print(f"中斷點三")
                 if k_demand == 0:
                     break
-            
+
+                # print(f"中斷點四")
+
+            # print(f"中斷點五")
             Res[k_name] = flow
 
             if k_demand != 0:
@@ -83,7 +88,7 @@ class myAlgorithm:
         
         # print(f"the remaining graph is")
         # self.print_data(E)
-
+        # print(f"中斷點六")
         return Res
 
     def add_path_to_result(
@@ -266,6 +271,30 @@ class myAlgorithm:
         for edge, w in path.items():
             if E[edge] < lowerbound or E[edge] == 0:
                 del E[edge]
+    
+    def set_default_commodity(self, src, dsts):
+        commodity_data = {
+            "name": "default_commodity",
+            "source": src,
+            "destinations": dsts,
+            "demand": 1
+        }
+
+        if self.commodities is None:
+            self.commodities = []
+
+        self.commodities.append(commodity_data)
+    
+    def set_default_capacity_link(self, links):
+        new_links = {}
+        for (u, v) in links:
+            new_links[(u, v)] = 1
+        
+        self.capacities = new_links
+
+    def get_default_commodity_name(self):
+        return "default_commodity"
+
     
 class ST:
 

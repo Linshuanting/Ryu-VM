@@ -87,6 +87,9 @@ class Topology():
         u, v = self.turn_to_key(u), self.turn_to_key(v)
         if (u, v) in self.link_bw and self.link_bw[(u, v)] is not None:
             return 
+        if bw is "None":
+            self.link_bw[(u, v)] = None
+            return 
         self.link_bw[(u, v)] = bw
 
     def get_link_bandwidth(self, u, v):
@@ -160,6 +163,15 @@ class Topology():
             # 刪除 host 記錄
             del self.hosts[name]
             self.del_hostName(host_mac)
+    
+    def get_nodes(self):
+        nodes = []
+        for host in self.hosts.keys():
+            nodes.append(host)
+        for switch in self.datapath.keys():
+            nodes.append(switch)
+        
+        return nodes
     
     def get_connecting_host_switch_data(self, host_name=None, host_mac=None) -> Tuple[int, int]:
         if host_name is not None and host_name in self.hosts:

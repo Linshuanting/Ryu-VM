@@ -1,11 +1,14 @@
 import paramiko
 import threading
 import logging
+import os
 from ipaddress import IPv6Address, IPv6Network
+from flask import Flask, request, jsonify
 
 # 設定 logging
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 
+app = Flask(__name__)
 class SSHManager:
     def __init__(self):
         """初始化 SSH 管理器，存儲所有的 SSH 連線"""
@@ -165,3 +168,81 @@ class SSHManager:
                             src_ip=None, dst_ip=None, fl_number_start=0x11000) -> str:
         """取得發送 FLabel 流量的指令"""
         return f"python {script_path} --src_ip {src_ip} --dst_ip {dst_ip} --fl_number_start {fl_number_start}"
+    
+    def get_send_flabel_packet_in_background_cmd(self, script_path='/home/user/mininet/custom/flow_flabel_background.py',
+                            src_ip=None, dst_ip=None, fl_number_start=0x11000) -> str:
+        
+        script_dir = os.path.dirname(script_path)
+
+        return f"cd {script_dir} && setsid nohup python {script_path} --src_ip {src_ip} --dst_ip {dst_ip} --fl_number_start {fl_number_start} --daemon > /dev/null 2>&1 &"
+
+    def get_iperf_setting_multicast_receiver_cmd(self, ip="ff38::1"):
+        iperf3 = f"iperf3 -s -p 5201 &"
+        iperf = f"setsid iperf -s -u -V -B {ip} -p 5201 > /dev/null 2>&1 &"
+        return iperf
+    
+    def get_iperf_send_packet_cmd(self, ipv6, bw=10, time=5, port = 5001):
+        """取得發送 iperf udp 流量的指令"""
+        iperf3 = f"iperf3 -c {ipv6} -u -b {bw}M -t {time} -p 5201 -6"
+        iperf = f"setsid iperf -c {ipv6} -u -V -b {bw}M -t {time} -p {port} > /dev/null 2>&1 &"
+        return iperf
+    
+ssh_manager = SSHManager()
+
+@app.route("/add_host", methods=["POST"])
+def api_add_host():
+    data = request.json
+    ssh_manager.add_host(data["hostname"], data["ip"], data["username"], data.get("password"), data.get("key_file"))
+    return jsonify({"message": f"{data['hostname']} 已新增"})
+
+@app.route("/check_host", methods=["POST"])
+def api_check_host():
+    data = request.json
+    result = ssh_manager.check_host(data["hostname"])
+    return jsonify({"output": bool(result) if result is not None else None})
+
+@app.route("/execute_command", methods=["POST"])
+def api_execute_command():
+    data = request.json
+    result = ssh_manager.execute_command(data["hostname"], data["command"])
+    return jsonify({"output": result})
+
+@app.route("/get_host_nic", methods=["POST"])
+def api_get_hostNIC():
+    data = request.json
+    host_nic = ssh_manager.get_host_default_nic(data["hostname"])
+    return jsonify({"output": host_nic})
+
+@app.route("/execute_set_ipv6_command", methods=["POST"])
+def api_execute_set_ipv6_command():
+    data = request.json
+    host_nic = ssh_manager.get_host_default_nic(data["hostname"])
+    ipaddr_cmd = ssh_manager.get_setting_ipaddr_ipv6_group_cmd(data["ip"], host_nic)
+    
+    result = ssh_manager.execute_command(data["hostname"], ipaddr_cmd)
+    
+    return jsonify({"output": result})
+
+@app.route("/execute_set_route_command", methods=["POST"])
+def api_execute_set_route_command():
+    data = request.json
+    host_nic = ssh_manager.get_host_default_nic(data["hostname"])
+    route_cmd = ssh_manager.get_setting_route_ipv6_cmd(data["ip"], host_nic)
+
+    result = ssh_manager.execute_command(data["hostname"], route_cmd)
+    
+    return jsonify({"output": result})
+
+@app.route("/execute_send_packet_command", methods=["POST"])
+def api_execute_send_packet_command():
+    data = request.json
+    cmd = ssh_manager.get_send_flabel_packet_in_background_cmd(
+        src_ip=data["src"],
+        dst_ip=data["dst"],
+        fl_number_start=data["flabel"]
+    )
+    result = ssh_manager.execute_command(data["hostname"], cmd)
+    return jsonify({"output": result})
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=4888)

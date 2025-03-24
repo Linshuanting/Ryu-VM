@@ -17,6 +17,7 @@ import os, re
 
 
 from algorithm.Dijkstra import NetworkGraph
+from algorithm.greedy import myAlgorithm
 from data_structure.packet import Icmpv6Packet, NDPPacket, LLDPPacket
 
 class TopoFind(app_manager.RyuApp):
@@ -128,6 +129,26 @@ class TopoFind(app_manager.RyuApp):
         if dst_ipv6.startswith("ff"):
             self.logger.info(f"收到多播封包: SRC={src_ipv6}, DST={dst_ipv6}")
             # TODO
+            # 當遇到其他的 多播封包， (我們自己的多播封包，開頭是 ff38)
+            # 需要對其找出多播路徑，然後告知其如何行動
+            
+            dsts = self.topo.get_hostName_from_ip(dst_ipv6)
+            src = self.topo.get_hostName_from_ip(src_ipv6)[0] 
+
+            if dsts is None:
+                self.logger.info(f"多播封包: DST={dst_ipv6}, 未紀錄到 host 資訊裡面")
+                return
+
+            dsts = [node for node in dsts if node != src]
+
+            self.logger.info(f"**收到多播封包: SRC:{src}, DST:{dsts}")
+
+            outports = self.write_multicast_to_switch(src, dsts, src_ipv6, dst_ipv6, datapath.id)
+            for outport in outports:
+                if outport == in_port:
+                    continue
+                self.send_pkt_msg(datapath=datapath, port=outport, data=msg.data)
+            
             return
 
         print(f"取得 IPv6 封包: SRC={src_ipv6}, DST={dst_ipv6}")
@@ -327,7 +348,7 @@ class TopoFind(app_manager.RyuApp):
             bw = self.get_switch_port_bandwidth(u, u_port_no)
         else:
             bw = self.get_switch_port_bandwidth(v, v_port_no)
-        
+
         self.topo.set_link_bandwidth(u, v, bw)
     
     def del_link_to_database(self, u, v=None):
@@ -347,6 +368,7 @@ class TopoFind(app_manager.RyuApp):
         interface = f"s{sw}-eth{port}"
         cmd = f"tc -s class show dev {interface}"
         result = os.popen(cmd).read()
+        # print(f"cmd: {cmd}, match:{result}")
         match = re.search(r"rate (\d+)Mbit ceil (\d+)Mbit", result)
         # 單位 Mbits
         if match:
@@ -354,6 +376,9 @@ class TopoFind(app_manager.RyuApp):
             return ceil
         else:
             return None
+        
+    def write_multicast_to_switch(self, src, dsts, src_ip, dst_ip, curr_node_id):
+        pass
     
     def write_path_to_switch(self, src, dst, ip_proto=None):
         
@@ -410,20 +435,13 @@ class TopoFind(app_manager.RyuApp):
     def _topo_monitor(self):
         """ 持續檢查特殊狀況 """
         while True:
-            hub.sleep(5)  # 每 5 秒檢查一次
+            hub.sleep(5)  # 每 1 秒檢查一次
             if not self.topo.get_datapaths():  # 如果沒有交換機，執行 initialize()
                 self.initialize()
 
-            # 檢查是否需要取得 link bw 資訊
-            if len(self.topo.get_links()) > 0:
-                links = self.topo.get_links()
-                for u, v in links:
-                    if self.topo.get_link_bandwidth(u, v) is None:
-                        u_port, v_port = links[(u, v)]
-                        bw = 0
-                        if not self.topo.is_host(u):
-                            bw = self.get_switch_port_bandwidth(u, u_port)
-                        else:
-                            bw = self.get_switch_port_bandwidth(v, v_port)
-                        
-                        self.topo.set_link_bandwidth(u, v, bw)
+            # 讓每個 switch 重新發送 lldp 封包，避免 lldp 漏接
+            for dp in self.topo.get_datapaths().values():
+                parser = dp.ofproto_parser
+                portRequestmsg = parser.OFPPortDescStatsRequest(dp)
+                dp.send_msg(portRequestmsg)
+

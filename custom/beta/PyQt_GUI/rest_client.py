@@ -165,7 +165,7 @@ class RestAPIClient:
                 # 分割 key 和 value
                 src_device, dst_device = key.rsplit("-", 1)  # 源设备
                 src_port, dst_port = value.rsplit("-", 1)  # 目标设备
-                bw = links_bw[key]
+                bw = links_bw.get(key, 0)
                 # links_bw[key] = float(bw)
 
                 nodes_set.add(src_device)
@@ -196,7 +196,7 @@ class RestAPIClient:
                 dst_sort_key = get_sort_key(dst_device)
 
                 # 存储解析后的数据和排序键
-                parsed_links.append(((src_sort_key, dst_sort_key), f"{src_formatted} → {dst_formatted}, bw:{bw}"))
+                parsed_links.append(((src_sort_key, dst_sort_key), f"{src_formatted} → {dst_formatted}, bw: {bw} Mbps"))
 
             # **按排序规则排序**
             parsed_links.sort(key=lambda x: (x[0][0], x[0][1]))
@@ -248,6 +248,7 @@ class AlgorithmWorker(QThread):
             print(f"algorithm start links: {self.links}")
             input_commodities = get_commodity(self.nodes, 2, start=self.cnt)
             result = run_algorithm(self.nodes, self.links, input_commodities)
+            print(f"Algorithm result:{result}")
             self.finished.emit(input_commodities, result)
         except Exception as e:
             self.error.emit(str(e))

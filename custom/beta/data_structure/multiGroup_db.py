@@ -2,7 +2,6 @@ import json
 import ipaddress
 from typing import List, Dict, Optional
 
-
 class MultiGroupDB:
 
     # TODO
@@ -82,12 +81,14 @@ class Commodity:
         for path in paths:
             
             flabel, mask = self.set_flabel(self.group_counter)
+            sport = self.set_sport(self.group_counter)
             
             commodity_group = _group(
                 ipv6_addr=ipv6_address,
                 flabel=flabel,
                 flabel_mask=mask,
-                path=path
+                path=path,
+                sport=sport
             )
             self.commodity_group_lists.append(commodity_group)
             self.group_counter += 1
@@ -107,6 +108,11 @@ class Commodity:
         flabel_mask = 0xFFFFF & (~((1 << mask_bits)-1))
 
         return flabel_value, flabel_mask
+    
+    def set_sport(self, counter):
+
+        base_port = 5000
+        return base_port+counter
 
     def get_ipv6_addr(self):
         return self.ipv6_address
@@ -133,11 +139,12 @@ class Commodity:
 
 class _group:
 
-    def __init__(self, ipv6_addr=None, flabel = None, flabel_mask = None, path = None):
+    def __init__(self, ipv6_addr=None, flabel = None, flabel_mask = None, path = None, sport=None):
         self.group_ipv6_address = ipv6_addr
         self.group_flabel = flabel
         self.group_flabel_mask = flabel_mask
         self.path = path
+        self.sport = sport
         self.set_bandwidth(path)
     
     def set_ipv6(self, ipv6):
@@ -159,6 +166,9 @@ class _group:
     def set_path(self, path):
         self.path = path
     
+    def set_sport(self, sport):
+        self.sport = sport
+    
     def get_ipv6(self):
         return self.group_ipv6_address
     
@@ -173,5 +183,8 @@ class _group:
     
     def get_path(self):
         return self.path
+
+    def get_sport(self):
+        return self.sport
     
     
