@@ -24,6 +24,7 @@ class MultiGroupDB:
             paths = paths,
             bw=bw
         )
+        myCommodity.set_dstport(self.set_dport(self.group_counter))
 
         self.commodities[commodtiy_name] = myCommodity
         self.group_counter+=1
@@ -31,6 +32,10 @@ class MultiGroupDB:
     def set_ipv6(self, counter):
         ipv6_addr = f"{self.base_ipv6_addr}{counter:04x}" # e.g. ff38::1
         return ipv6_addr
+    
+    def set_dport(self, counter):
+        base_port = 6000
+        return counter+base_port
     
     def get_ipv6(self, commodtiy_name):
         if commodtiy_name in self.commodities:
@@ -60,8 +65,14 @@ class MultiGroupDB:
         if commodtiy_name in self.commodities:
             return self.commodities[commodtiy_name].get_bandwidth()
     
+    def get_dst_port(self, commodity_name):
+        if commodity_name in self.commodities:
+            return self.commodities[commodity_name].get_dstport()
 
 class Commodity:
+    # TODO
+    # modify dst_port
+
     def __init__(self, name):
         self.commodity_name = name
         self.ipv6_address = ""
@@ -71,6 +82,7 @@ class Commodity:
         self.bandwidth = 0
         self.commodity_group_lists = []
         self.group_counter = 1
+        self.dst_port = 0
     
     def set_commodity_data(self, ipv6_address, src, dsts, paths, bw):
         self.ipv6_address = ipv6_address
@@ -113,6 +125,9 @@ class Commodity:
 
         base_port = 5000
         return base_port+counter
+    
+    def set_dstport(self, dport):
+        self.dst_port = dport
 
     def get_ipv6_addr(self):
         return self.ipv6_address
@@ -125,6 +140,9 @@ class Commodity:
     
     def get_bandwidth(self):
         return self.bandwidth
+    
+    def get_dstport(self):
+        return self.dst_port
     
     def get_group_list(self):
         return self.commodity_group_lists

@@ -100,11 +100,26 @@ class SSHManager:
             logging.error(f"無效的 IPv6 地址: {ip}")
             return ""
 
+    def get_setting_route_ipv6_del_cmd(self, ip: str, host_nic: str) -> str:
+        try:
+            ipv6_addr = IPv6Address(ip)
+            routing_ip = str(IPv6Network(f"{ipv6_addr}/16", strict=False).network_address)
+            return f"ip -6 route del {routing_ip}/16 dev {host_nic}"
+        except ValueError:
+            logging.error(f"無效的 IPv6 地址: {ip}")
+            return ""
+
     def get_setting_ipaddr_ipv6_group_cmd(self, ip: str, host_nic: str) -> str:
         return f"ip addr add {ip} dev {host_nic} autojoin"
 
+    def get_setting_ipaddr_ipv6_group_del_cmd(self, ip: str, host_nic: str) -> str:
+        return f"ip addr del {ip} dev {host_nic}"
+
     def get_setting_maddr_ipv6_cmd(self, ip: str, host_nic: str) -> str:
         return f"ip -6 maddr add {ip} dev {host_nic}"
+
+    def get_setting_maddr_ipv6_del_cmd(self, ip: str, host_nic: str) -> str:
+        return f"ip -6 maddr del {ip} dev {host_nic}"
 
     def get_send_flabel_packet_cmd(self, script_path='/home/user/mininet/custom/flow_flabel.py', src_ip=None, dst_ip=None, fl_number_start=0x11000) -> str:
         return f"python {script_path} --src_ip {src_ip} --dst_ip {dst_ip} --fl_number_start {fl_number_start}"
@@ -118,6 +133,9 @@ class SSHManager:
 
     def get_iperf_send_packet_cmd(self, ipv6, bw=10, time=5, port=5001):
         return f"setsid iperf -c {ipv6} -u -V -b {bw}M -t {time} -p {port} > /dev/null 2>&1 &"
+    
+    def get_update_table_of_modify_flabel_cmd(self, ipv6, dport, script_path="/home/user/mininet/custom/update_table.py"):
+        return f"python {script_path} --ip {ipv6} --output_dport {dport}"
 
 ssh_manager = SSHManager()
 
@@ -165,6 +183,22 @@ def api_execute_set_route_command():
     
     return jsonify({"output": result})
 
+@app.route("/execute_del_ipv6_command", methods=["POST"])
+def api_execute_del_ipv6_command():
+    data = request.json
+    host_nic = ssh_manager.get_host_default_nic(data["hostname"])
+    del_cmd = ssh_manager.get_setting_ipaddr_ipv6_group_del_cmd(data["ip"], host_nic)
+    result = ssh_manager.execute_command(data["hostname"], del_cmd)
+    return jsonify({"output": result})
+
+@app.route("/execute_del_route_command", methods=["POST"])
+def api_execute_del_route_command():
+    data = request.json
+    host_nic = ssh_manager.get_host_default_nic(data["hostname"])
+    del_cmd = ssh_manager.get_setting_route_ipv6_del_cmd(data["ip"], host_nic)
+    result = ssh_manager.execute_command(data["hostname"], del_cmd)
+    return jsonify({"output": result})
+
 @app.route("/execute_send_packet_command", methods=["POST"])
 def api_execute_send_packet_command():
     data = request.json
@@ -176,6 +210,16 @@ def api_execute_send_packet_command():
     result = ssh_manager.execute_command(data["hostname"], cmd)
     return jsonify({"output": result})
 
+@app.route("/execute_update_table_command", methods=["POST"])
+def api_execute_update_modify_flabel_table_command():
+    data = request.json
+    cmd = ssh_manager.get_update_table_of_modify_flabel_cmd(
+        ipv6 = data["dst"],
+        dport=data["dport"]
+    )
+    result = ssh_manager.execute_command(data["hostname"], cmd)
+    return jsonify({"output": result})
+
 @app.route("/execute_iperf_server_command", methods=["POST"])
 def api_execute_iperf_server_command():
     data = request.json
@@ -183,7 +227,8 @@ def api_execute_iperf_server_command():
         ip=data["dst"],
         port=data["port"]
     )
-    result = ssh_manager.execute_command(data["hostname"], cmd)
+    for host in data["hostname"]:
+        result = ssh_manager.execute_command(data["hostname"], cmd)
     return jsonify({"output": result})
 
 @app.route("/execute_iperf_client_command", methods=["POST"])
@@ -198,6 +243,12 @@ def api_execute_iperf_client_command():
     result = ssh_manager.execute_command(data["hostname"], cmd)
     return jsonify({"output": result})
 
+@app.route("/collect_iperf_csv", methods=["POST"])
+def api_collect_iperf_csv():
+    data = request.json
+    host_list = data.get("hosts", [])  # 例如 ["h1", "h2", "h3"]
+    collect_iperf_csv_from_hosts(ssh_manager, host_list)
+    return jsonify({"message": "所有主機的 iperf CSV 已拉回"})
 
 
 if __name__ == "__main__":

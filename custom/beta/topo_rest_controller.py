@@ -1,7 +1,7 @@
 from ryu.app.wsgi import ControllerBase, route
+from custom.beta.tools.commodity_parser import commodity_parser as cm_parser
 from webob import Response
 from collections import defaultdict
-from beta.tools.commodity_parser import commodity_parser as cm_parser
 import json
 
 class TopologyRestController(ControllerBase):
@@ -43,6 +43,7 @@ class TopologyRestController(ControllerBase):
             print(f"commodity name: {commodities_name}")
 
             self.controller.setting_commodity_ip_to_host(commodities_name)
+            
             self.controller.apply_instruction_to_switch(commodities_name)
 
         except Exception as e:

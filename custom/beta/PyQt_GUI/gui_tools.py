@@ -2,7 +2,7 @@ import json
 import re
 import subprocess, random
 from typing import Dict, Tuple, List, Set
-from beta.algorithm.greedy import myAlgorithm
+from custom.beta.algorithm.greedy import myAlgorithm
 
 def get_bandwidth(links):
     

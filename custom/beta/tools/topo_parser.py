@@ -1,6 +1,6 @@
 import json
 import re
-from beta.tools.utils import str_to_tuple
+from custom.beta.tools.utils import str_to_tuple
 
 class TopologyParser:
 

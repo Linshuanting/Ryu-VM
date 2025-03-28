@@ -1,18 +1,19 @@
 import os, sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from topo_find import TopoFind
-from typing import List, Dict, Tuple, Set
-import tools.selection_method_parser as sm_parser
 from ryu.lib.packet import ethernet, ether_types
 from ryu.app.wsgi import WSGIApplication
-from tools.utils import print_dict, append_to_json, initialize_file
-from topo_rest_controller import TopologyRestController
-from data_structure.multiGroup_db import MultiGroupDB as MG_DB
-from tools.commodity_parser import commodity_parser as cm_parser
-# from tools.ssh_connect import SSHManager
-from ssh_api_client import SSHManagerAPIWrapper
-from algorithm.greedy import myAlgorithm
+
+from custom.beta.topo_find import TopoFind
+from custom.beta.tools.utils import print_dict, append_to_json, initialize_file
+from custom.beta.topo_rest_controller import TopologyRestController
+from custom.beta.data_structure.multiGroup_db import MultiGroupDB as MG_DB
+from custom.beta.tools.commodity_parser import commodity_parser as cm_parser
+from custom.beta.ssh_api_client import SSHManagerAPIWrapper
+from custom.beta.algorithm.greedy import myAlgorithm
+import custom.beta.tools.selection_method_parser as sm_parser
+
+from typing import List, Dict, Tuple, Set
 import concurrent.futures
 
 class MyController(TopoFind):
@@ -26,7 +27,6 @@ class MyController(TopoFind):
         self.priority = 100
         self.group_db = MG_DB()
         self.sshd_URL = "http://localhost:4888"
-        # self.sshd = SSHManager()
         self.sshd = SSHManagerAPIWrapper(port=4888)
         self.file_name = "~/mininet/custom/output.json"
         initialize_file(self.file_name)
@@ -77,14 +77,14 @@ class MyController(TopoFind):
 
                     
                         # self.send_flowMod_to_switch(dp, inport, group_id, multi_ip)
-                self.send_flowMod_to_switch(
+            self.send_flowMod_to_switch(
                             dp, 
                             inport, 
                             group_id, 
                             src_ip=src_ip,
                             multi_ip=dst_ip)
                     
-                self.group_id_counter+=1
+            self.group_id_counter+=1
 
         print(f"curr node:{curr_node_id}")
         print(f"flow out port:{flow_out_port[curr_node_id]}")
@@ -183,9 +183,6 @@ class MyController(TopoFind):
 
     def ask_host_to_send_packets(self, commodities_name_list):
         
-        def send_packet(src, cmd):
-            self.sshd.execute_command(src, cmd)
-
         with concurrent.futures.ThreadPoolExecutor() as executor:
             futures = []
             for name in commodities_name_list:
@@ -193,12 +190,22 @@ class MyController(TopoFind):
                 dsts = self.group_db.get_dsts(name)
                 src_ip = self.topo.get_host_single_ipv6(src)
                 group_multi_ip = self.group_db.get_ipv6(name)
+                dport = self.group_db.get_dst_port(name)
 
                 self.set_ssh_connect_way(src)
+
+                output = self.sshd.execute_update_table_command(
+                        hostname=src,
+                        dst_ip=group_multi_ip,
+                        port=dport
+                    )
+                print(f"update_table_output:{output}, dport:{dport}")
+                
                 for group in self.group_db.get_commodity_group_list(name):
                     flabel = group.get_flabel()
                     sport = group.get_sport()
                     bw = group.get_bandwidth()
+
                     self.sshd.execute_iperf_client_command(
                         hostname=src,
                         dst_ip=group_multi_ip,

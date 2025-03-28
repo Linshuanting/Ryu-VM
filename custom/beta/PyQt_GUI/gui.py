@@ -7,9 +7,9 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import QTimer, Qt
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
 
-from beta.PyQt_GUI.rest_client import RestAPIClient
+from custom.beta.PyQt_GUI.rest_client import RestAPIClient
 
 RYU_API_URL = "http://localhost:8080"
 
@@ -66,11 +66,15 @@ class RyuFlowMonitor(QWidget):
         self.update_db_button = QPushButton("Update DB")
         self.set_host_switch_button = QPushButton("Set Host And Switch")
         self.start_send_packet_button = QPushButton("Start Send Packet")
+        self.run_all_button = QPushButton("Run All Steps")
+        self.clear_output_button = QPushButton("Clear Output")
         
         button_layout.addWidget(self.run_button)
         button_layout.addWidget(self.update_db_button)
         right_buttons_layout.addWidget(self.set_host_switch_button)
         right_buttons_layout.addWidget(self.start_send_packet_button)
+        right_buttons_layout.addWidget(self.run_all_button)
+        right_buttons_layout.addWidget(self.clear_output_button)
 
         left_layout.addLayout(button_layout)
         right_layout.addLayout(right_buttons_layout)
@@ -91,6 +95,9 @@ class RyuFlowMonitor(QWidget):
         self.update_db_button.clicked.connect(lambda: self.client.upload_commodity_data(self.result_text, self.record_result_text))
         self.set_host_switch_button.clicked.connect(lambda: self.client.set_host_and_switch(self.record_result_text))
         self.start_send_packet_button.clicked.connect(lambda: self.client.send_packet(self.record_result_text))
+
+        # self.run_all_button.clicked.connect(self.client.run_all_steps)
+        # self.clear_output_button.clicked.connect(self.client.clear_all_texts)
 
 
 if __name__ == "__main__":

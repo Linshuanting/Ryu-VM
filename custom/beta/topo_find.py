@@ -10,8 +10,8 @@ from ryu.lib.packet import lldp
 from ryu.lib.packet import ipv6, icmpv6, tcp
 from ryu.lib import hub
 from ryu.exception import RyuException
-from data_structure.topo_data_structure import Topology
 from ryu.app.wsgi import WSGIApplication
+from custom.beta.data_structure.topo_data_structure import Topology
 import threading
 import os, re
 

@@ -1,9 +1,9 @@
 from PyQt5.QtCore import QThread, pyqtSignal
 import requests
 import json
-from beta.tools.utils import tuple_key_to_str
-from beta.tools.commodity_parser import commodity_parser as cm_parser
-from beta.PyQt_GUI.gui_tools import get_bandwidth, get_commodity, run_algorithm
+from custom.beta.tools.utils import tuple_key_to_str
+from custom.beta.tools.commodity_parser import commodity_parser as cm_parser
+from custom.beta.PyQt_GUI.gui_tools import get_bandwidth, get_commodity, run_algorithm
 
 class RestAPIClient:
     def __init__(self, url):

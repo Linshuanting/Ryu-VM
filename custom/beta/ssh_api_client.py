@@ -62,8 +62,15 @@ class SSHManagerAPIWrapper:
             "dst": dst,
             "flabel": flabel
         }).get("output", "")
+    
+    def execute_update_table_command(self, hostname, dst_ip, port):
+        return self._post("/execute_update_table_command", {
+            "hostname": hostname,
+            "dst": dst_ip,
+            "dport": port
+        }).get("output", "")
 
-    def execute_iperf_server_command(self, hostname, dst_ip, port):
+    def execute_iperf_server_command(self, hostname:list, dst_ip, port):
         return self._post("/execute_iperf_server_command", {
             "hostname": hostname,
             "dst": dst_ip,
