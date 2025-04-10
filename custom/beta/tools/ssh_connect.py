@@ -2,6 +2,7 @@ import paramiko
 import threading
 import logging
 import os
+import json
 from ipaddress import IPv6Address, IPv6Network
 from flask import Flask, request, jsonify
 
@@ -12,6 +13,7 @@ app = Flask(__name__)
 class SSHManager:
     def __init__(self):
         self.connection_infos = {}  # 儲存重連資訊
+        self.default_host_nic = {}
 
     def add_host(self, hostname, ip, username, password=None, key_file=None):
         self.connection_infos[hostname] = {
@@ -78,6 +80,10 @@ class SSHManager:
         logging.info(f"{hostname}:{remote_path} 已下載至 {local_path}")
 
     def get_host_default_nic(self, hostname):
+
+        if hostname in self.default_host_nic:
+            return self.default_host_nic[hostname]
+
         logging.info(f"取得 {hostname} 的預設網卡")
         output = self.execute_command(hostname, "ip -br a")
         if not output:
@@ -87,6 +93,7 @@ class SSHManager:
             if len(parts) > 1 and "UP" in parts[1]:
                 nic_name = parts[0].split('@')[0]
                 logging.info(f"✅ {hostname} 的 Default NIC: {nic_name}")
+                self.default_host_nic[hostname] = nic_name
                 return nic_name
         logging.warning(f"⚠ {hostname} 無法獲取 Default NIC")
         return None
@@ -128,14 +135,27 @@ class SSHManager:
         script_dir = os.path.dirname(script_path)
         return f"cd {script_dir} && setsid nohup python {script_path} --src_ip {src_ip} --dst_ip {dst_ip} --fl_number_start {fl_number_start} --daemon > /dev/null 2>&1 &"
 
-    def get_iperf_setting_multicast_receiver_cmd(self, ip="ff38::1", port=5001):
-        return f"setsid iperf -s -u -V -B {ip} -p {port} > /dev/null 2>&1 &"
+    def get_iperf_setting_multicast_receiver_cmd(self, host, ip="ff38::1", port=6001, duration=10, script_path='/home/user/mininet/custom/pcap/'):
+        return f"setsid timeout {duration} iperf -s -u -V -B {ip} -p {port} -i 1 > {script_path}iperf_{ip.replace(':', '_')}_{host}_{port}.log 2>&1 &"
 
-    def get_iperf_send_packet_cmd(self, ipv6, bw=10, time=5, port=5001):
+    def get_iperf_send_packet_cmd(self, ipv6, bw=10, time=10, port=5001):
         return f"setsid iperf -c {ipv6} -u -V -b {bw}M -t {time} -p {port} > /dev/null 2>&1 &"
     
     def get_update_table_of_modify_flabel_cmd(self, ipv6, dport, script_path="/home/user/mininet/custom/update_table.py"):
-        return f"python {script_path} --ip {ipv6} --output_dport {dport}"
+        return f"python {script_path} --ip {ipv6} --dport {dport}"
+
+    def get_update_table_of_modify_flabel_one_iperf_cmd(self, ipv6, dport, weights, script_path="/home/user/mininet/custom/update_table_one_iperf.py"):
+        weights_str = ",".join(map(str, weights))
+        return f"python {script_path} --ip {ipv6} --dport {dport} --weights {weights_str}"
+
+    def get_start_tcpdump_to_pcap_cmd(self, host, ipv6, nic, port, duration=10, script_path="/home/user/mininet/custom/"):
+        pcap_filename = f"pcap/{ipv6}_{host}.pcap"
+        return f"setsid timeout {duration} tcpdump -i {nic} udp port {port} -w {script_path}{pcap_filename} > /dev/null 2>&1 &"
+    
+    def get_analysis_pcap_cmd(self, host, ipv6, wait=10, script_path="/home/user/mininet/custom/"):
+        pcap_filename = f"pcap/{ipv6}_{host}.pcap"
+        output_filename = f"{ipv6}_{host}.csv"
+        return f"setsid python {script_path}analysis_iperf_per_second.py --pcap {script_path}{pcap_filename} --wait {wait} --output {output_filename} --ssh > /dev/null 2>&1 &"
 
 ssh_manager = SSHManager()
 
@@ -223,12 +243,14 @@ def api_execute_update_modify_flabel_table_command():
 @app.route("/execute_iperf_server_command", methods=["POST"])
 def api_execute_iperf_server_command():
     data = request.json
-    cmd = ssh_manager.get_iperf_setting_multicast_receiver_cmd(
-        ip=data["dst"],
-        port=data["port"]
-    )
     for host in data["hostname"]:
-        result = ssh_manager.execute_command(data["hostname"], cmd)
+        cmd = ssh_manager.get_iperf_setting_multicast_receiver_cmd(
+            host=host,
+            ip=data["dst"],
+            port=data["port"],
+            duration=data.get("time", 10)
+        )
+        result = ssh_manager.execute_command(host, cmd)
     return jsonify({"output": result})
 
 @app.route("/execute_iperf_client_command", methods=["POST"])
@@ -243,13 +265,98 @@ def api_execute_iperf_client_command():
     result = ssh_manager.execute_command(data["hostname"], cmd)
     return jsonify({"output": result})
 
-@app.route("/collect_iperf_csv", methods=["POST"])
-def api_collect_iperf_csv():
+@app.route("/execute_nftable_add_rule_command", methods=["POST"])
+def api_execute_nftable_add_rule_command():
     data = request.json
-    host_list = data.get("hosts", [])  # 例如 ["h1", "h2", "h3"]
-    collect_iperf_csv_from_hosts(ssh_manager, host_list)
-    return jsonify({"message": "所有主機的 iperf CSV 已拉回"})
 
+    hostname = data["hostname"]
+    table = data.get("table", "myfilter")
+    chain = data.get("chain", "prerouting")
+    queue_num = data.get("queue", 2)
+
+    # 支援單個 port 或多個 port
+    ports = data.get("ports")
+    port = data.get("port")
+
+    if ports:
+        # 多個 port
+        port_expr = ", ".join(str(p) for p in ports)
+        port_match = f"udp dport {{ {port_expr} }}"
+    elif port:
+        # 單個 port
+        port_match = f"udp dport {port}"
+    else:
+        return jsonify({"error": "Missing 'port' or 'ports' in request"}), 400
+
+    # 建立 nftables 規則，將指定 port 的 UDP 封包送入 NFQUEUE
+    add_cmd = (
+        f"nft add rule ip6 {table} {chain} {port_match} queue num {queue_num}"
+    )
+
+    result = ssh_manager.execute_command(hostname, add_cmd)
+    return jsonify({
+        "command": add_cmd,
+        "output": result
+    })
+
+@app.route("/execute_send_mapping_to_socket", methods=["POST"])
+def api_send_mapping_to_socket():
+    data = request.json
+
+    hostname = data["hostname"]
+    ip = data["ip"]
+    fl_p_dict = data["fl_p_dict"]
+    script_path = "/home/user/mininet/custom/update_table_server_port.py"
+
+    if not isinstance(fl_p_dict, dict):
+        return jsonify({"error": "'fl_p_dict' must be a dict"}), 400
+
+    # 將 fl_p_list 轉成合法 JSON 字串
+    json_mapping_str = json.dumps(fl_p_dict)
+
+    # 組出遠端執行指令
+    cmd = f"python3 {script_path} --ip {ip} --mapping '{json_mapping_str}'"
+
+    # 執行 SSH 指令
+    result = ssh_manager.execute_command(hostname, cmd)
+
+    return jsonify({
+        "hostname": hostname,
+        "command": cmd,
+        "output": result
+    })
+
+
+@app.route("/execute_tcpdump_and_get_csv_command", methods=["POST"])
+def api_execute_tcpdump_receiver_and_send_csv():
+    data = request.json
+    time = data["time"] + 5
+    hosts = data["hostname"]
+    results = []
+
+    for host in hosts:
+        result = []
+        cmd = ssh_manager.get_start_tcpdump_to_pcap_cmd(
+            host=host,
+            ipv6=data["dst_ip"],
+            nic=ssh_manager.get_host_default_nic(host),
+            port=data["dport"],
+            duration=time
+        )
+        res = ssh_manager.execute_command(host, cmd)
+        result.append(res)
+
+        cmd = ssh_manager.get_analysis_pcap_cmd(
+            host=host,
+            ipv6=data["dst_ip"],
+            wait=time
+        )
+        res = ssh_manager.execute_command(host, cmd)
+        result.append(res)
+
+        results.append(result)
+    
+    return jsonify({"output": results})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=4888)

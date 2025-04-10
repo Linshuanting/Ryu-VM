@@ -1,0 +1,2 @@
+Source,Destination,Second,Packets,Bandwidth (Mbps),Avg Jitter (ms),Loss Rate (%)
+2001:db8::1,ff38::2,1744083589,14155,16.31,0.439,100.0

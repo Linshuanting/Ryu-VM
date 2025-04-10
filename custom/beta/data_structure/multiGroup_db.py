@@ -1,6 +1,8 @@
 import json
-import ipaddress
+from ipaddress import IPv6Address
 from typing import List, Dict, Optional
+
+dport_num = 6001
 
 class MultiGroupDB:
 
@@ -24,7 +26,7 @@ class MultiGroupDB:
             paths = paths,
             bw=bw
         )
-        myCommodity.set_dstport(self.set_dport(self.group_counter))
+        myCommodity.set_commodity_dport(self.set_dport(self.group_counter))
 
         self.commodities[commodtiy_name] = myCommodity
         self.group_counter+=1
@@ -61,13 +63,44 @@ class MultiGroupDB:
         if commodtiy_name in self.commodities:
             return self.commodities[commodtiy_name].get_paths()
     
-    def get_bandwidth(self, commodtiy_name):
+    def get_total_bandwidth(self, commodtiy_name):
         if commodtiy_name in self.commodities:
-            return self.commodities[commodtiy_name].get_bandwidth()
+            return self.commodities[commodtiy_name].get_total_bandwidth()
     
-    def get_dst_port(self, commodity_name):
+    def get_bandwidth_list(self, commodtiy_name):
+        if commodtiy_name in self.commodities:
+            return self.commodities[commodtiy_name].get_bandwidth_list()
+    
+    def get_dst_commodity_port(self, commodity_name):
         if commodity_name in self.commodities:
-            return self.commodities[commodity_name].get_dstport()
+            return self.commodities[commodity_name].get_commodity_port()
+    
+    def get_src_port_list(self, commodity_name):
+        if commodity_name in self.commodities:
+            return self.commodities[commodity_name].get_srcports()
+
+    def get_fl_port_dict(self, commodity_name):
+        if commodity_name in self.commodities:
+            return self.commodities[commodity_name].get_fl_p_dict()
+    
+    def get_tree_ports_list(self, commodity_name):
+        if commodity_name in self.commodities:
+            return self.commodities[commodity_name].get_trees_ports_list()
+
+    def get_commodity_info(self, commodity_name):
+        if commodity_name not in self.commodities:
+            return    
+        com = self.commodities[commodity_name]
+        return {
+            "commodity": commodity_name,
+            "src": self.get_src(commodity_name),
+            "dsts": self.get_dsts(commodity_name),
+            "dst_ip": self.get_ipv6(commodity_name),
+            "s_dport": self.get_src_port_list(commodity_name),
+            "dport": self.get_dst_commodity_port(commodity_name),
+            "bw": self.get_bandwidth_list(commodity_name)
+        }
+        
 
 class Commodity:
     # TODO
@@ -82,10 +115,11 @@ class Commodity:
         self.bandwidth = 0
         self.commodity_group_lists = []
         self.group_counter = 1
-        self.dst_port = 0
+        self.commodity_dport = 0
     
     def set_commodity_data(self, ipv6_address, src, dsts, paths, bw):
-        self.ipv6_address = ipv6_address
+        global dport_num
+        self.ipv6_address = str(IPv6Address(ipv6_address))
         self.src_host = src
         self.dst_hosts = dsts
         self.bandwidth = bw
@@ -100,9 +134,11 @@ class Commodity:
                 flabel=flabel,
                 flabel_mask=mask,
                 path=path,
-                sport=sport
+                sport=sport,
+                dport=dport_num
             )
             self.commodity_group_lists.append(commodity_group)
+            dport_num+=1
             self.group_counter += 1
     
     def set_flabel(self, counter):
@@ -126,8 +162,8 @@ class Commodity:
         base_port = 5000
         return base_port+counter
     
-    def set_dstport(self, dport):
-        self.dst_port = dport
+    def set_commodity_dport(self, dport):
+        self.commodity_dport = dport
 
     def get_ipv6_addr(self):
         return self.ipv6_address
@@ -138,11 +174,30 @@ class Commodity:
     def get_dsts(self):
         return self.dst_hosts
     
-    def get_bandwidth(self):
+    def get_total_bandwidth(self):
         return self.bandwidth
     
-    def get_dstport(self):
-        return self.dst_port
+    def get_bandwidth_list(self):
+        bws = []
+        for group in self.commodity_group_lists:
+            bws.append(group.get_bandwidth())
+        return bws 
+
+    def get_commodity_port(self):
+        return self.commodity_dport
+    
+    def get_trees_ports_list(self):
+        ports = []
+        for group in self.commodity_group_lists:
+            ports.append(group.get_tree_dport())
+        
+        return ports
+    
+    def get_srcports(self):
+        ports = []
+        for group in self.commodity_group_lists:
+            ports.append(group.get_sport())
+        return ports
     
     def get_group_list(self):
         return self.commodity_group_lists
@@ -154,15 +209,24 @@ class Commodity:
             paths.append(path)
         
         return paths
-
+    
+    def get_fl_p_dict(self):
+        res = {}
+        for group in self.commodity_group_lists:
+            fl = group.get_flabel()
+            port = group.get_tree_dport()
+            res[fl] = port
+        
+        return res
 class _group:
 
-    def __init__(self, ipv6_addr=None, flabel = None, flabel_mask = None, path = None, sport=None):
+    def __init__(self, ipv6_addr=None, flabel = None, flabel_mask = None, path = None, sport=None, dport=None):
         self.group_ipv6_address = ipv6_addr
         self.group_flabel = flabel
         self.group_flabel_mask = flabel_mask
         self.path = path
         self.sport = sport
+        self.dport = dport
         self.set_bandwidth(path)
     
     def set_ipv6(self, ipv6):
@@ -187,6 +251,9 @@ class _group:
     def set_sport(self, sport):
         self.sport = sport
     
+    def set_tree_dport(self, dport):
+        self.dport = dport
+    
     def get_ipv6(self):
         return self.group_ipv6_address
     
@@ -204,5 +271,8 @@ class _group:
 
     def get_sport(self):
         return self.sport
+    
+    def get_tree_dport(self):
+        return self.dport
     
     

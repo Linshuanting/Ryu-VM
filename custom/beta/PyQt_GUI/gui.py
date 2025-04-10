@@ -12,12 +12,14 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.
 from custom.beta.PyQt_GUI.rest_client import RestAPIClient
 
 RYU_API_URL = "http://localhost:8080"
+SSH_API_URL = "http://localhost:4888"
 
 class RyuFlowMonitor(QWidget):
 
     def __init__(self):
         super().__init__()
         self.client = RestAPIClient(RYU_API_URL)
+        self.client.set_ssh_url(SSH_API_URL)
         self.initUI()
         self.start_auto_fetch()
         self.connect_buttons()

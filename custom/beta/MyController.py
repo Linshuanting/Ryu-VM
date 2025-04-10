@@ -190,17 +190,56 @@ class MyController(TopoFind):
                 dsts = self.group_db.get_dsts(name)
                 src_ip = self.topo.get_host_single_ipv6(src)
                 group_multi_ip = self.group_db.get_ipv6(name)
-                dport = self.group_db.get_dst_port(name)
+                dport = self.group_db.get_dst_commodity_port(name)
+                bw = self.group_db.get_total_bandwidth(name)
+                bw_list = self.group_db.get_bandwidth_list(name)
+                fl_p_dict = self.group_db.get_fl_port_dict(name)
+                time = 10
 
                 self.set_ssh_connect_way(src)
+                for dst in dsts:
+                    self.set_ssh_connect_way(dst)
 
+                # 更改 client iptable nfqueue， dport -> flabel:dport
                 output = self.sshd.execute_update_table_command(
                         hostname=src,
                         dst_ip=group_multi_ip,
                         port=dport
+                        # weights=bw_list
                     )
                 print(f"update_table_output:{output}, dport:{dport}")
+
+                for dst in dsts:
+                    # 更改 nftable，新增 dport -> nfqueue 2 規則
+                    output = self.sshd.execute_iperf_nftable_add_rule_command(
+                        hostname=dst,
+                        port=dport
+                    )
+
+                    print(f"nftable output in {dst}: {output}")
+
+                    # 更改 server nfqueue table，新增 multi ip -> fl -> port
+                    output = self.sshd.execute_send_mapping_to_server_command(
+                        hostname=dst,
+                        dst_ip=group_multi_ip,
+                        fl_p_dict=fl_p_dict
+                    )
+                    print(f"update_server:{dst}_table_output:{output}, dport:{dport}")
+
+                # 執行多個 iperf server
+                for port in self.group_db.get_tree_ports_list(name):
+                    self.sshd.execute_iperf_server_command(dsts, group_multi_ip, port, time)
                 
+                # res = self.sshd.execute_tcpdump_and_get_csv_command(dsts, group_multi_ip, dport, time)
+
+                # self.sshd.execute_iperf_client_command(
+                #     hostname=src,
+                #     dst_ip=group_multi_ip,
+                #     bw=bw,
+                #     port=5001,
+                #     time=time
+                # )
+
                 for group in self.group_db.get_commodity_group_list(name):
                     flabel = group.get_flabel()
                     sport = group.get_sport()
@@ -210,7 +249,8 @@ class MyController(TopoFind):
                         hostname=src,
                         dst_ip=group_multi_ip,
                         bw=bw,
-                        port=sport
+                        port=sport,
+                        time=time
                     )
 
     def send_flowMod_to_switch(self, 
@@ -357,6 +397,7 @@ class MyController(TopoFind):
             print("WSGI object loaded successfully.")
             wsgi.register(TopologyRestController, {
                 'topology_data': self.topo,
+                'multiGroup_data': self.group_db,
                 'controller': self
                 })
             print("TopologyController registered.")

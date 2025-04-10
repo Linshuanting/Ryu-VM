@@ -9,6 +9,7 @@ class TopologyRestController(ControllerBase):
         super(TopologyRestController, self).__init__(req, link, data, **config)
         self.topology_data = data['topology_data']
         self.controller = data['controller']
+        self.group_db = data['multiGroup_data']
 
     @route('topology', '/topology', methods=['GET'])
     def get_topology(self, req, **kwargs):
@@ -16,6 +17,21 @@ class TopologyRestController(ControllerBase):
         body = json.dumps(converted_data, indent=4)
         return Response(content_type='application/json; charset=UTF-8', body=body)
     
+    @route('server', '/multiGroupData', methods=['GET'])
+    def get_multigroup_data(self, req, **kwargs):
+        try:
+            query = req.params.get('commodities')
+            commodities = json.loads(query)  # 解 JSON 字串
+        except Exception:
+            return Response(status=400, body="Invalid query string")
+
+        response_data = []
+        for commodity in commodities:
+            response_data.append(self.group_db.get_commodity_info(commodity))
+
+        body = json.dumps(response_data, indent=4)
+        return Response(content_type='application/json; charset=UTF-8', body=body)
+
         
     @route('server', '/add_commodity_request', methods=['POST'])
     def upload_commodities_data(self, req, **kwargs):

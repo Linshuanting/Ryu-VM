@@ -63,25 +63,48 @@ class SSHManagerAPIWrapper:
             "flabel": flabel
         }).get("output", "")
     
-    def execute_update_table_command(self, hostname, dst_ip, port):
+    def execute_update_table_command(self, hostname, dst_ip, port, weights=[]):
         return self._post("/execute_update_table_command", {
             "hostname": hostname,
             "dst": dst_ip,
-            "dport": port
+            "dport": port,
+            "weights": weights
         }).get("output", "")
 
-    def execute_iperf_server_command(self, hostname:list, dst_ip, port):
+    def execute_iperf_server_command(self, hostname:list, dst_ip, port, time):
         return self._post("/execute_iperf_server_command", {
             "hostname": hostname,
             "dst": dst_ip,
-            "port": port
+            "port": port,
+            "time":time
         }).get("output", "")
 
-    def execute_iperf_client_command(self, hostname, dst_ip, bw, port, time=5):
+    def execute_iperf_client_command(self, hostname, dst_ip, bw, port, time=10):
         return self._post("/execute_iperf_client_command", {
             "hostname": hostname,
             "dst": dst_ip,
             "bw": bw,
             "time": time,
             "port": port
+        }).get("output", "")
+    
+    def execute_iperf_nftable_add_rule_command(self, hostname, port):
+        return self._post("/execute_nftable_add_rule_command", {
+            "hostname": hostname,
+            "port": port
+        }).get("output", "")
+    
+    def execute_send_mapping_to_server_command(self, hostname, dst_ip, fl_p_dict):
+        return self._post("/execute_send_mapping_to_socket", {
+            "hostname": hostname,
+            "ip": dst_ip,
+            "fl_p_dict": fl_p_dict
+        }).get("output", "")
+    
+    def execute_tcpdump_and_get_csv_command(self, hostname, dst_ip, dport, time=10):
+        return self._post("/execute_tcpdump_and_get_csv_command", {
+            "hostname": hostname,
+            "dst_ip": dst_ip,
+            "dport": dport,
+            "time": time
         }).get("output", "")

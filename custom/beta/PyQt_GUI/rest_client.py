@@ -8,6 +8,7 @@ from custom.beta.PyQt_GUI.gui_tools import get_bandwidth, get_commodity, run_alg
 class RestAPIClient:
     def __init__(self, url):
         self.url = url
+        self.ssh_url = None
         self.latest_links = None
         self.latest_nodes = None
         self.latest_links_bw = None
@@ -20,6 +21,8 @@ class RestAPIClient:
         self.fetch_worker = None
         self.set_host_switch_worker = None
         self.send_packet_worker = None
+        self.multi_group_worker = None
+        self.send_pkt_worker = None
 
     def run_algorithm_process(self, result_text):
         if self.latest_links is None or self.latest_nodes is None:
@@ -143,6 +146,63 @@ class RestAPIClient:
     def on_send_packet_finished(self, respone, send_packet_text):
         self.record_result.clear()
         send_packet_text.setPlainText(f"✅ sending packet finished:\n{respone }")
+    
+    def test_send_packet(self, send_packet_text):
+        commodities = [info["name"] for info in self.record_result]
+        send_packet_text.setPlainText("📡 Get MultiGroup Data... \n")
+
+
+        self.multi_group_worker = MultiGroupWorker(self.url, commodities)
+        self.multi_group_worker.finished.connect(self.on_multigroup_finished)
+        self.multi_group_worker.error.connect(lambda e: print(f"❌ MultiGroup error: {e}"))
+        self.multi_group_worker.start()
+
+    def on_multigroup_finished(self, multigroup_result):
+        print("✅ MultiGroup done, result:", multigroup_result)
+
+        self.send_pkt_workers = []  # 🔹 用 list 存下所有 worker 實例
+
+        for commodity in multigroup_result:
+            worker = SendPktWorker(self.ssh_url)
+            worker.set_data(
+                src=commodity["src"],
+                dsts=commodity["dsts"],
+                dst_ip=commodity["dst_ip"],
+                s_dport_list=commodity["s_dport"],
+                dport=commodity["dport"],
+                bw_list=commodity["bw"],
+                time=5
+            )
+            worker.finished.connect(self.on_sendpkt_finished)
+            worker.error.connect(lambda e: print(f"❌ SendPkt error: {e}"))
+            worker.start()
+
+            self.send_pkt_workers.append(worker)  # ✅ 保留參考避免被 GC 清掉
+    
+    def on_sendpkt_finished(self, result):
+        print("📦 SendPktWorker finished with result:")
+        print(result)
+
+        # 將這次結果存入列表
+        if not hasattr(self, 'sendpkt_results'):
+            self.sendpkt_results = []
+
+        self.sendpkt_results.append(result)
+
+        # 自訂完成條件：當所有 worker 都完成
+        if len(self.sendpkt_results) == len(self.send_pkt_workers):
+            print("✅ 所有封包傳送任務完成！")
+            # 可以統一處理所有結果
+            for idx, res in enumerate(self.sendpkt_results):
+                print(f"🔹 Worker {idx} result:")
+                print(res)
+
+            # ✨ 顯示到 GUI 或 log 等處理都可加在這裡
+            
+            # 清空 worker 與結果記憶體
+            self.send_pkt_workers.clear()
+            self.sendpkt_results.clear()
+
 
     def fetch_topology_data(self, links_text, hosts_text):
         self.fetch_worker = FetchWorker(self.url)
@@ -222,8 +282,12 @@ class RestAPIClient:
         except Exception as e:
             links_text.setPlainText(f"数据解析失败: {e}")
             hosts_text.setPlainText(f"数据解析失败: {e}")
+    
+    def set_ssh_url(self, url):
+        self.ssh_url = url
 
 FETCH_DATA_LINK = "/topology"
+GET_MULTIGROUP_LINK = "/multiGroupData"
 UPLOAD_DATA_LINK = "/add_commodity_request"
 UPDATE_HOST_SWITCH_DATA_LINK = "/update_host_and_switch_through_commodities"
 SEND_PACKET_THROUGH_DATA_LINK = "/send_packet"
@@ -333,3 +397,106 @@ class FetchWorker(QThread):
             self.finished.emit(response.json())
         except requests.exceptions.RequestException as e:
             self.error.emit(f"❌ Error fetching data from API: {e}")
+
+class MultiGroupWorker(QThread):
+    finished = pyqtSignal(list)
+    error = pyqtSignal(str)
+
+    def __init__(self, url, commodities_list):
+        super().__init__()
+        self.url = url
+        self.commodities_list = commodities_list
+    
+    def run(self):
+        try:
+            url = f"{self.url}{GET_MULTIGROUP_LINK}"
+            response = requests.get(url, 
+                                    params={'commodities': json.dumps(self.commodities_list)})
+            response.raise_for_status()
+            self.finished.emit(response.json())
+        except requests.exceptions.RequestException as e:
+            self.error.emit(f"❌ Error fetching data from API: {e}") 
+
+class SendPktWorker(QThread):
+    finished = pyqtSignal(dict)
+    error = pyqtSignal(str)
+
+    iperf_client_link = "/execute_iperf_client_command"
+    iperf_server_link = "/execute_iperf_server_command"
+    update_table_of_NFQUEUE_link = "/execute_update_table_command"
+
+    def __init__(self, url):
+        super().__init__()
+        self.url = url
+    
+    def set_data(self, src, dsts, dst_ip, s_dport_list, dport, bw_list, time=5):
+        self.src = src
+        self.dsts = dsts
+        self.dst_ip = dst_ip
+        self.s_dport_list = s_dport_list  # 改名為 list
+        self.dport = dport
+        self.bw_list = bw_list
+        self.time = time
+
+    def post_client_data(self, host, bw, s_dport):
+        return {
+            "hostname": host,
+            "dst": self.dst_ip,
+            "bw": bw,
+            "time": self.time,
+            "port": s_dport
+        }
+    
+    def post_server_data(self, hosts):
+        return {
+            "hostname": hosts,
+            "dst": self.dst_ip,
+            "port": self.dport
+        }
+
+    def post_table_data(self, host):
+        return {
+            "hostname": host,
+            "dst": self.dst_ip,
+            "port": self.dport
+        }
+    
+    def execute_cmd(self, link, json_data):
+        
+        try:
+            exe_url = f"{self.url}{link}"
+            headers = {'Content-Type': 'application/json'}
+            print(f"📤 Setting Data to Host and Switch, {exe_url}...")
+            response = requests.post(exe_url, data=json_data, headers=headers)
+            return response
+        except requests.exceptions.RequestException as e:
+            return (f"❌ Error send packet data from API: {e}")
+
+
+    def run(self):
+        all_update_res = []
+        all_server_res = []
+        all_client_res = []
+
+        for s_dport, bw in zip(self.s_dport_list, self.bw_list):
+            # 每次替換 port 值
+
+            update_table_data = self.post_table_data(self.src)
+            update_res = self.execute_cmd(self.update_table_of_NFQUEUE_link, update_table_data)
+
+            iperf_server_data = self.post_server_data(self.dsts)
+            server_res = self.execute_cmd(self.iperf_server_link, iperf_server_data)
+
+            iperf_client_data = self.post_client_data(self.src, bw, s_dport)  # 這裡是 client 的 port
+            client_res = self.execute_cmd(self.iperf_client_link, iperf_client_data)
+
+            # 收集結果
+            all_update_res.append(update_res)
+            all_server_res.append(server_res)
+            all_client_res.append(client_res)
+
+        self.finished.emit({
+            "update_res": all_update_res,
+            "server_res": all_server_res,
+            "client_res": all_client_res
+        })
