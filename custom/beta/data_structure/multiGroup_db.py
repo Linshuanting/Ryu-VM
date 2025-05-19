@@ -71,6 +71,16 @@ class MultiGroupDB:
         if commodtiy_name in self.commodities:
             return self.commodities[commodtiy_name].get_bandwidth_list()
     
+    # 請求目前的 path 可以負載的 bandwidth，而非總共需要的 bandwidth
+    def get_on_demand_bandwidth(self, commodtiy_name):
+        if commodtiy_name in self.commodities:
+            demand_bandwidth = 0
+            for bw in self.commodities[commodtiy_name].get_bandwidth_list():
+                demand_bandwidth += bw
+            
+            return demand_bandwidth
+        return 0
+    
     def get_dst_commodity_port(self, commodity_name):
         if commodity_name in self.commodities:
             return self.commodities[commodity_name].get_commodity_port()

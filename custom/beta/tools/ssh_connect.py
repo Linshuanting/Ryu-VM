@@ -135,8 +135,8 @@ class SSHManager:
         script_dir = os.path.dirname(script_path)
         return f"cd {script_dir} && setsid nohup python {script_path} --src_ip {src_ip} --dst_ip {dst_ip} --fl_number_start {fl_number_start} --daemon > /dev/null 2>&1 &"
 
-    def get_iperf_setting_multicast_receiver_cmd(self, host, ip="ff38::1", port=6001, duration=10, script_path='/home/user/mininet/custom/pcap/'):
-        return f"setsid timeout {duration} iperf -s -u -V -B {ip} -p {port} -i 1 > {script_path}iperf_{ip.replace(':', '_')}_{host}_{port}.log 2>&1 &"
+    def get_iperf_setting_multicast_receiver_cmd(self, host, ip="ff38::1", port=6001, duration=10, script_path='/home/user/mininet/custom/simulation_result/raw_data/'):
+        return f"setsid timeout {duration} iperf -s -u -e -V -B {ip} -p {port} -i 1 > {script_path}iperf_{ip.replace(':', '_')}_{host}_{port}.log 2>&1 &"
 
     def get_iperf_send_packet_cmd(self, ipv6, bw=10, time=10, port=5001):
         return f"setsid iperf -c {ipv6} -u -V -b {bw}M -t {time} -p {port} > /dev/null 2>&1 &"
@@ -226,6 +226,17 @@ def api_execute_send_packet_command():
         src_ip=data["src"],
         dst_ip=data["dst"],
         fl_number_start=data["flabel"]
+    )
+    result = ssh_manager.execute_command(data["hostname"], cmd)
+    return jsonify({"output": result})
+
+@app.route("/execute_update_table_of_one_iperf_command", methods=["POST"])
+def api_execute_update_modify_flabel_table_of_one_iperf_command():
+    data = request.json
+    cmd = ssh_manager.get_update_table_of_modify_flabel_one_iperf_cmd(
+        ipv6 = data["dst"],
+        dport=data["dport"],
+        weights=data["weights"]
     )
     result = ssh_manager.execute_command(data["hostname"], cmd)
     return jsonify({"output": result})

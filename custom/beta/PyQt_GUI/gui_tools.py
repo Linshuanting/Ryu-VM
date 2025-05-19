@@ -13,6 +13,7 @@ def get_bandwidth(links):
         capacity = 0
         if a.startswith("h") or b.startswith("h"):
             capacity = 50
+            
         else:
             capacity = 20
         capacities[f"{a}-{b}"] = capacities.get(f"{a}-{b}", capacity)
@@ -37,7 +38,7 @@ def get_commodity(nodes, num, start=1):
         dst_cnt = random.randint(1, 3)
         chosen_dst = random.sample(possible_dsts, min(dst_cnt, len(possible_dsts)))
 
-        demand_val = random.randint(5, 30)
+        demand_val = random.randint(10, 20)
 
         commodity_data = {
             "name": commodity_name,

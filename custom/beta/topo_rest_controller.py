@@ -75,7 +75,8 @@ class TopologyRestController(ControllerBase):
             commodities_name, _ = parser.parser(json.loads(body))
 
             print(f"Start sending packet ......")
-            self.controller.ask_host_to_send_packets(commodities_name)
+            # self.controller.ask_host_to_send_packets(commodities_name)
+            self.controller.ask_host_to_send_packet_by_one_iperf(commodities_name)
 
         except Exception as e:
             import traceback

@@ -1,4 +1,5 @@
 from pulp import LpMaximize, LpProblem, LpVariable, lpSum, value
+from pulp import PULP_CBC_CMD
 import json
 import re
 
@@ -150,13 +151,47 @@ class MultiCommodityFlowProblem:
 
     def solve(self):
         """Solve the optimization problem and print the results."""
-        self.problem.solve()
+        try:
+        # 嘗試 gap + node 限制
+            self.problem.solve(PULP_CBC_CMD(gapRel=0.01, maxNodes=5000, msg=False))
+        except:
+            # 備援：硬停在 20 秒內
+            self.problem.solve(PULP_CBC_CMD(gapRel=0.01, maxSecond=5, msg=True))
+
 
         solution = {}
         for v in self.problem.variables():
             solution[v.name] = value(v)
         
         self.solution = solution
+    
+    def get_presentage_of_commodities(self):
+        z_vars = []
+
+        for name, value in self.solution.items():
+            if name.startswith("Z"):
+                z_vars.append((name, value))
+        
+        return z_vars
+    
+    def get_total_throughput(self):
+        commodity_throughput = []
+        
+        com_presentage = self.get_presentage_of_commodities()
+        # print(f"commodity presentage: {com_presentage}")
+        for i in range(len(self.commodities)):
+            (s_k, T_k, d_k) = self.commodities[i]
+            name, presentage = com_presentage[i+1]
+            commodity_throughput.append(d_k*presentage)
+        
+        return commodity_throughput
+
+    def finish_solver(self):
+        _=value(self.problem.objective)
+
+        # 若你還想要確保變數都有值，可以這樣：但不印出來
+        for var in self.problem.variables():
+            _ = var.varValue
 
     def get_solve(self):
         z_vars = []
@@ -215,19 +250,27 @@ class MultiCommodityFlowProblem:
 
 if __name__ == "__main__":
 
-    with open('custom/topology_learn/test_topo.json', 'r') as file:
+    with open('/home/user/mininet/custom/topology.json', 'r') as file:
         data = json.load(file)
 
-    topo = data['topologies'][1]
+    topology_name = "mesh_v2_topology"
+    topo = data['topologies'][topology_name]
     
-    nodes = topo['nodes']
-    links = [(link[0], link[1]) for link in topo['links']]
+    nodes = [node["name"] for node in topo["nodes"]]
+    
+    links = []
+    for link in topo["links"]:
+        n1, n2 = link["link"].split("-")
+        links.append((n1, n2))
+        links.append((n2, n1))
+
     commodities = [(demand['source'], demand['destinations'], demand['demand']) for demand in topo['demands']] 
-    trees = 2
+    trees = 5
     capacities = {}
-    for link, capa in topo['capacities'].items():
-        node1, node2 = link.split('-')
-        capacities[(node1, node2)] = capa  
+    for info in topo['links']:
+        node1, node2 = info["link"].split('-')
+        capacities[(node1, node2)] = info["bw"]  
+        capacities[(node2, node1)] = info["bw"]
 
     print("---------start----------")
 

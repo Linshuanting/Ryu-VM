@@ -181,7 +181,7 @@ class MyController(TopoFind):
             self.set_ssh_connect_way(src)
             self.sshd.execute_set_route_command(src, multi_group_ip)
 
-    def ask_host_to_send_packets(self, commodities_name_list):
+    def old_ask_host_to_send_packets(self, commodities_name_list):
         
         with concurrent.futures.ThreadPoolExecutor() as executor:
             futures = []
@@ -194,7 +194,7 @@ class MyController(TopoFind):
                 bw = self.group_db.get_total_bandwidth(name)
                 bw_list = self.group_db.get_bandwidth_list(name)
                 fl_p_dict = self.group_db.get_fl_port_dict(name)
-                time = 10
+                time = 5
 
                 self.set_ssh_connect_way(src)
                 for dst in dsts:
@@ -252,6 +252,123 @@ class MyController(TopoFind):
                         port=sport,
                         time=time
                     )
+    
+    def ask_host_to_send_packet_by_one_iperf(self, commodities_name_list):
+
+        for name in commodities_name_list:
+            src = self.group_db.get_src(name)
+            dsts = self.group_db.get_dsts(name)
+            src_ip = self.topo.get_host_single_ipv6(src)
+            group_multi_ip = self.group_db.get_ipv6(name)
+            dport = self.group_db.get_dst_commodity_port(name)
+            bw = self.group_db.get_on_demand_bandwidth(name)
+            bw_list = self.group_db.get_bandwidth_list(name)
+            fl_p_dict = self.group_db.get_fl_port_dict(name)
+            time = 70
+
+            # 設定連線方式
+            self.set_ssh_connect_way(src)
+            
+            output = self.sshd.execute_update_table_of_one_iperf_command(
+                        hostname=src,
+                        dst_ip=group_multi_ip,
+                        port=dport,
+                        weights=bw_list
+                    )
+            
+            # 執行 dsts 的 iperf server    
+            self.sshd.execute_iperf_server_command(dsts, group_multi_ip, dport, time)
+
+            self.sshd.execute_iperf_client_command(
+                    hostname=src,
+                    dst_ip=group_multi_ip,
+                    bw=bw,
+                    port=5001,
+                    time=time
+                )
+
+    def ask_host_to_send_packets(self, commodities_name_list):
+        
+        for name in commodities_name_list:
+            src = self.group_db.get_src(name)
+            dsts = self.group_db.get_dsts(name)
+            src_ip = self.topo.get_host_single_ipv6(src)
+            group_multi_ip = self.group_db.get_ipv6(name)
+            dport = self.group_db.get_dst_commodity_port(name)
+            bw = self.group_db.get_total_bandwidth(name)
+            bw_list = self.group_db.get_bandwidth_list(name)
+            fl_p_dict = self.group_db.get_fl_port_dict(name)
+            time = 60
+
+            # 設定連線方式
+            self.set_ssh_connect_way(src)
+            for dst in dsts:
+                self.set_ssh_connect_way(dst)
+
+            # 更新 client iptable（來源端）
+            output = self.sshd.execute_update_table_command(
+                hostname=src,
+                dst_ip=group_multi_ip,
+                port=dport
+            )
+            print(f"update_table_output:{output}, dport:{dport}")
+
+            # 更新 server nftables + nfqueue mapping
+            for dst in dsts:
+                output = self.sshd.execute_iperf_nftable_add_rule_command(
+                    hostname=dst,
+                    port=dport
+                )
+                print(f"nftable output in {dst}: {output}")
+
+                output = self.sshd.execute_send_mapping_to_server_command(
+                    hostname=dst,
+                    dst_ip=group_multi_ip,
+                    fl_p_dict=fl_p_dict
+                )
+                print(f"update_server:{dst}_table_output:{output}, dport:{dport}")
+
+            # 啟動 iperf server（每個 port）
+            for port in self.group_db.get_tree_ports_list(name):
+                self.sshd.execute_iperf_server_command(dsts, group_multi_ip, port, time+60)
+
+            # ❗最終：並行啟動所有 iperf client
+            client_groups = self.group_db.get_commodity_group_list(name)
+
+            for group in client_groups:
+                flabel = group.get_flabel()
+                sport = group.get_sport()
+                bw = group.get_bandwidth()
+
+                self.sshd.execute_iperf_client_command(
+                    hostname=src,
+                    dst_ip=group_multi_ip,
+                    bw=bw,
+                    port=sport,
+                    time=time
+                )
+
+            # with concurrent.futures.ThreadPoolExecutor() as executor:
+            #     futures = []
+            #     for group in client_groups:
+            #         flabel = group.get_flabel()
+            #         sport = group.get_sport()
+            #         bw = group.get_bandwidth()
+
+            #         futures.append(
+            #             executor.submit(
+            #                 self.sshd.execute_iperf_client_command,
+            #                 hostname=src,
+            #                 dst_ip=group_multi_ip,
+            #                 bw=bw,
+            #                 port=sport,
+            #                 time=time
+            #             )
+            #         )
+
+                # 等待全部 client 執行完畢（可選）
+                # concurrent.futures.wait(futures)
+
 
     def send_flowMod_to_switch(self, 
                                datapath, 

@@ -11,7 +11,11 @@ class myAlgorithm:
     
     def run(self, R1:int, R2:int) -> Dict[str, List[Dict[Tuple[str, str], float]]]:
 
-        return self.greedy(self.nodes, self.capacities, self.commodities, R1, R2)
+        nodes = self.nodes
+        capacities = self.capacities
+        commodities = self.commodities
+
+        return self.greedy(nodes, capacities, commodities, R1, R2)
 
     def greedy(
             self, 
@@ -51,7 +55,7 @@ class myAlgorithm:
                 self.add_path_respectively_to_result(path, flow)
                 self.delete_redundant_edge(lower_bound, filtered_E, path)
 
-                print(f"current flow in algorithm: {flow}, current demand:{k_demand}")
+                # print(f"current flow in algorithm: {flow}, current demand:{k_demand}")
 
             self.update_E(E, flow)
             #  print(f"中斷點一")
@@ -113,7 +117,7 @@ class myAlgorithm:
         st = ST(V, E)
         st.turn_negative_edge()
         tree = st.build_by_prim(src)
-        print(f"prim algorithm result: {tree}")
+        # print(f"prim algorithm result: {tree}")
         st.turn_negative_edge()
         return st.turn_negative_edge(tree)
 
@@ -257,6 +261,18 @@ class myAlgorithm:
                 for (u, v), w in res.items():
                     print(f"link: {u}-{v}, bandwidth:{w}")
                 print("-----------------")
+
+    def get_throughput(self, result: Dict[str, List[Dict[Tuple[str, str], float]]]):
+        commodity_throughput = []
+        for name, list in result.items():
+            throughput = []
+            for res in list:
+                for(u, v), w in res.items():
+                    throughput.append(w)
+                    break
+            commodity_throughput.append(throughput)
+        
+        return commodity_throughput
 
     def update_E(self, E:Dict[Tuple[str, str], float], paths:List[Dict[Tuple[str, str], float]]):
         for path in paths:

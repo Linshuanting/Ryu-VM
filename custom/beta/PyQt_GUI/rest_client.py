@@ -310,7 +310,7 @@ class AlgorithmWorker(QThread):
             print("🚀 Running algorithm in background thread...")
             # capacities = get_bandwidth(self.links)
             print(f"algorithm start links: {self.links}")
-            input_commodities = get_commodity(self.nodes, 2, start=self.cnt)
+            input_commodities = get_commodity(self.nodes, 4, start=self.cnt)
             result = run_algorithm(self.nodes, self.links, input_commodities)
             print(f"Algorithm result:{result}")
             self.finished.emit(input_commodities, result)
